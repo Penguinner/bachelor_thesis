@@ -5,6 +5,7 @@ use std::fs::{read_to_string, File};
 use std::io::{BufReader, Read};
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
+use quick_xml::events::attributes::Attribute;
 use regex::Regex;
 
 pub struct Parser {
@@ -64,7 +65,13 @@ impl Parser {
                         b"pages" => {publication.pages = self.read_text()?.parse()?;},
                         b"url" => {publication.resources.push(("url".to_string(),self.read_text()?))},
                         b"ee" => {publication.resources.push(("ee".to_string(),self.read_text()?))},
-                        b"note" => {},
+                        b"note" => {
+                            let attr = e.try_get_attribute("type").unwrap().unwrap().value.as_ref();
+                            match attr {
+                                b"isbn" => {publication.isbn = self.read_text()?.parse()?;},
+                                _ => {publication.resources.push((String::from(attr),self.read_text()?))},
+                            }
+                        },
                         b"number" => {publication.number = self.read_text()?.parse()?;},
                         b"volume" => {publication.volume = self.read_text()?.parse()?;},
                         // Article
@@ -76,6 +83,7 @@ impl Parser {
                         // Thesis
                         b"school" => {publication.school = self.read_text()?;},
                         // Other
+                        b"isbn" => {publication.isbn = self.read_text()?;},
                         b"cite" => {publication.references.push(("cite".to_string(),self.read_text()?));},
                         b"crossref" => {publication.references.push(("crossref".to_string(),self.read_text()?));},
                         b"series" => {publication.references.push(("series".to_string(),self.read_text()?));},
@@ -177,6 +185,7 @@ pub struct Publication {
     editor: String,
     book_title: String,
     school: String,
+    isbn: String,
     references: Vec<(String,String)>, // cite, crossref, series, stream
     resources: Vec<(String, String)>, // ee, url, note(without isbn tagged notes)
     authors: Vec<Person>,
@@ -200,6 +209,7 @@ impl Publication {
             editor: String::new(),
             book_title: String::new(),
             school: String::new(),
+            isbn: String::new(),
             references: Vec::new(),
             resources: Vec::new(),
             authors: Vec::new(),
