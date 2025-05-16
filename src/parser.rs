@@ -48,6 +48,8 @@ impl Parser {
     fn read_publication(&mut self, eve: &BytesStart) -> Result<Option<Record>, Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut publication = Publication::new();
+        publication.key = String::from(eve.try_get_attribute("key").unwrap().unwrap().value);
+        publication.mdate = String::from(eve.try_get_attribute("mdate").unwrap().unwrap().value);
         loop {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) =>
@@ -78,7 +80,7 @@ impl Parser {
                         b"journal" => {publication.journal = self.read_text()?;},
                         // Proceedings
                         b"publisher" => {publication.publisher = self.read_text()?;},
-                        b"editor" => {publication.editor = self.read_text()?;},
+                        b"editor" => {publication.editor.push(self.read_text()?);},
                         b"booktitle" => {publication.book_title = self.read_text()?;}, // Also in inproceedings and incollection
                         // Thesis
                         b"school" => {publication.school = self.read_text()?;},
@@ -100,14 +102,36 @@ impl Parser {
 
     fn read_person(&mut self, eve: &BytesStart) -> Result<Option<Record>, Box<dyn Error>> {
         let mut buf = Vec::new();
-
+        let mut person = Person::new();
+        person.mdate = String::from(eve.try_get_attribute("mdate").unwrap().unwrap().value);
         loop {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) =>
                     match e.name().as_ref() {
-                        b"author" => {},
-                        b"note" => {},
-                        b"url" => {},
+                        b"author" => {
+                            let author = self.read_text()?;
+                            if person.name == String::new() {
+                                person.add_name(author);
+                            }
+                            else {
+                                person.alias.push(author);
+                            }
+                        },
+                        b"note" => {
+                            let attr = e.try_get_attribute("type").unwrap().unwrap().value.as_ref();
+                            if attr == b"affiliation" {
+                                let state = String::from(e.try_get_attribute("label")
+                                    .unwrap_or(Some(Attribute::from("current")))
+                                    .unwrap()
+                                    .value
+                                    .as_ref());
+                                person.affiliations.push((String::from(attr),state));
+                            }
+                        },
+                        b"url" => {
+                            let url = self.read_text()?;
+                            person.urls.push(url);
+                        },
                         _ => { self.reader.read_to_end_into(e.to_end().name(), &mut Vec::new()).unwrap();} // Skip unknown tags
                     }
                 Ok(Event::End(e)) if e.name().as_ref() == b"www" => break,
@@ -182,10 +206,10 @@ pub struct Publication {
     number: usize,
     journal: String,
     publisher: String,
-    editor: String,
     book_title: String,
     school: String,
     isbn: String,
+    editor: Vec<String>,
     references: Vec<(String,String)>, // cite, crossref, series, stream
     resources: Vec<(String, String)>, // ee, url, note(without isbn tagged notes)
     authors: Vec<Person>,
@@ -206,10 +230,10 @@ impl Publication {
             number: 0,
             journal: String::new(),
             publisher: String::new(),
-            editor: String::new(),
             book_title: String::new(),
             school: String::new(),
             isbn: String::new(),
+            editor: Vec::new(),
             references: Vec::new(),
             resources: Vec::new(),
             authors: Vec::new(),
@@ -220,10 +244,10 @@ impl Publication {
 pub struct Person {
     name: String,
     id: String,
+    alias: Vec<String>,
     mdate: String,
     affiliations: Vec<(String,String)>,
     urls: Vec<String>,
-    orcid: String,
 }
 
 impl Person {
@@ -231,10 +255,10 @@ impl Person {
         Person {
             name: String::new(),
             id: String::new(),
+            alias: Vec::new(),
             mdate: String::new(),
             affiliations: Vec::new(),
             urls: Vec::new(),
-            orcid: String::new(),
         }
     }
 
