@@ -1,9 +1,8 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt::format;
 use std::fs::{read_to_string, File};
-use std::io::{BufReader, Read};
+use std::io::BufReader;
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::events::attributes::Attribute;
@@ -147,7 +146,7 @@ impl Parser {
         let mut buf = Vec::new();
         match self.reader.read_event_into(&mut buf) {
             Ok(Event::Text(e)) => {
-                let mut a = e.unescape().unwrap().into_owned().to_string();
+                let a = e.unescape().unwrap().into_owned().to_string();
                 let re = Regex::new(r"&(\w+);").unwrap();
                 let result = re.replace_all(a.as_str(), |caps: &regex::Captures| {
                     let key = &caps[1];
@@ -196,10 +195,10 @@ pub enum Record {
 }
 
 impl Record {
-    pub fn to_sql_ops(&self) -> Vec<String> {
+    pub fn generate_sql_ops(&self) -> Vec<String> {
         match self {
-            Record::Publication(publication) => publication.to_owned().to_sql_ops(),
-            Record::Person(person) => person.to_owned().to_sql_ops(),
+            Record::Publication(publication) => publication.to_owned().generate_sql_ops(),
+            Record::Person(person) => person.to_owned().generate_sql_ops(),
         }
     }
 }
@@ -250,7 +249,7 @@ impl Publication {
         }
     }
 
-    pub fn to_sql_ops(&mut self) -> Vec<String> {
+    pub fn generate_sql_ops(&mut self) -> Vec<String> {
         let mut sql_ops = Vec::new();
         // Venues
         let mut venue_name = String::new();
@@ -438,7 +437,7 @@ impl Person {
         }
     }
 
-    fn to_sql_ops(&mut self) -> Vec<String> {
+    fn generate_sql_ops(&mut self) -> Vec<String> {
         let mut sql_ops = Vec::new();
 
         // Author
