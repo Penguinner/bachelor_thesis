@@ -154,9 +154,9 @@ impl Parser {
                         .map(|&val| Cow::Borrowed(val.as_str()))
                         .unwrap_or_else(|| Cow::Borrowed( &caps[0]))
                 });
-                Ok(a)
+                Ok(result.to_string())
             }
-            _ => return Err("Unexpected tag".into()),
+            _ => Err("Unexpected tag".into()),
         }
     }
 }
@@ -167,7 +167,7 @@ impl Iterator for Parser {
     fn next(&mut self) -> Option<Self::Item> {
         let mut buf = Vec::new();
         let mut rec: Option<Record> = None;
-        while rec == None {
+        while rec.is_none() {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e))
                 if matches!(e.name().as_ref(), b"dblp")=> {}, // Skip if the tag is dblp
