@@ -1,12 +1,12 @@
+use quick_xml::events::attributes::Attribute;
+use quick_xml::events::{BytesStart, Event};
+use quick_xml::Reader;
+use regex::Regex;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{read_to_string, File};
 use std::io::BufReader;
-use quick_xml::Reader;
-use quick_xml::events::{BytesStart, Event};
-use quick_xml::events::attributes::Attribute;
-use regex::Regex;
 
 pub struct Parser {
     reader: Reader<BufReader<File>>,
@@ -48,8 +48,8 @@ impl Parser {
     fn read_publication(&mut self, eve: &BytesStart) -> Result<Option<Record>, Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut publication = Publication::new();
-        publication.key = String::from(eve.try_get_attribute("key").unwrap().unwrap().value);
-        publication.mdate = String::from(eve.try_get_attribute("mdate").unwrap().unwrap().value);
+        publication.key = String::from(eve.try_get_attribute("key").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?);
+        publication.mdate = String::from(eve.try_get_attribute("mdate").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?);
         loop {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) =>
@@ -68,9 +68,9 @@ impl Parser {
                         b"url" => {publication.resources.push(("url".to_string(),self.read_text()?))},
                         b"ee" => {publication.resources.push(("ee".to_string(),self.read_text()?))},
                         b"note" => {
-                            let attr = e.try_get_attribute("type").unwrap().unwrap().value.as_ref();
-                            match attr {
-                                b"isbn" => {publication.isbn = self.read_text()?.parse()?;},
+                            let attr = e.try_get_attribute("type").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?;
+                            match attr.as_ref() {
+                                "isbn" => {publication.isbn = self.read_text()?.parse()?;},
                                 _ => {publication.resources.push((String::from(attr),self.read_text()?))},
                             }
                         },
@@ -103,7 +103,7 @@ impl Parser {
     fn read_person(&mut self, eve: &BytesStart) -> Result<Option<Record>, Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut person = Person::new();
-        person.mdate = String::from(eve.try_get_attribute("mdate").unwrap().unwrap().value);
+        person.mdate = String::from(eve.try_get_attribute("mdate").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?);
         loop {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) =>
@@ -118,13 +118,12 @@ impl Parser {
                             }
                         },
                         b"note" => {
-                            let attr = e.try_get_attribute("type").unwrap().unwrap().value.as_ref();
-                            if attr == b"affiliation" {
+                            let attr = e.try_get_attribute("type").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?;
+                            if attr == "affiliation" {
                                 let state = String::from(e.try_get_attribute("label")
-                                    .unwrap_or(Some(Attribute::from("current")))
+                                    .unwrap_or(Some(Attribute::from(("label","current"))))
                                     .unwrap()
-                                    .value
-                                    .as_ref());
+                                    .decode_and_unescape_value(self.reader.decoder())?);
                                 person.affiliations.push((String::from(attr),state));
                             }
                         },
@@ -139,20 +138,22 @@ impl Parser {
                 _ => (),
             }
         }
-        Ok(None)
+        Ok(Some(Record::Person(person)))
     }
 
     fn read_text(&mut self) -> Result<String, Box<dyn Error>> {
         let mut buf = Vec::new();
         match self.reader.read_event_into(&mut buf) {
             Ok(Event::Text(e)) => {
-                let a = e.unescape().unwrap().into_owned().to_string();
+                let a = e.unescape()?.into_owned();
                 let re = Regex::new(r"&(\w+);").unwrap();
-                let result = re.replace_all(a.as_str(), |caps: &regex::Captures| {
+                let replacements = &self.replacements;
+                let result = re.replace_all(&a, |caps: &regex::Captures| {
                     let key = &caps[1];
-                    self.replacements.get(key)
-                        .map(|&val| Cow::Borrowed(val.as_str()))
-                        .unwrap_or_else(|| Cow::Borrowed( &caps[0]))
+                    match replacements.get(key) {
+                        Some(v) => Cow::Borrowed(v.as_str()),
+                        None => Cow::Owned(caps[0].to_owned()),
+                    }
                 });
                 Ok(result.to_string())
             }
@@ -172,11 +173,11 @@ impl Iterator for Parser {
                 Ok(Event::Start(e))
                 if matches!(e.name().as_ref(), b"dblp")=> {}, // Skip if the tag is dblp
                 Ok(Event::Start(e))
-                if self.is_person(e.name().as_ref(), e.try_get_attribute("key").unwrap().unwrap().value.as_ref()) => {
+                if Parser::is_person(e.name().as_ref(), e.try_get_attribute("key").unwrap().unwrap().value.as_ref()) => {
                     rec = self.read_person(&e).unwrap();
                 },
                 Ok(Event::Start(e))
-                if self.is_publication(e.name().as_ref()) => {
+                if Parser::is_publication(e.name().as_ref()) => {
                     rec = self.read_publication( &e).unwrap();
                 },
                 Ok(Event::Eof) => (),
@@ -220,7 +221,7 @@ pub struct Publication {
     isbn: String,
     editor: Vec<String>,
     references: Vec<(String,String)>, // cite, crossref
-    resources: Vec<(String, String)>, // ee, url, note(without isbn tagged notes), series, stream
+    resources: Vec<(String, String)>, // ee, url, note (without isbn tagged notes), series, stream
     authors: Vec<Person>,
 }
 
@@ -249,7 +250,7 @@ impl Publication {
         }
     }
 
-    pub fn generate_sql_ops(&mut self) -> Vec<String> {
+    pub fn generate_sql_ops(&self) -> Vec<String> {
         let mut sql_ops = Vec::new();
         // Venues
         let mut venue_name = String::new();
@@ -437,7 +438,7 @@ impl Person {
         }
     }
 
-    fn generate_sql_ops(&mut self) -> Vec<String> {
+    fn generate_sql_ops(&self) -> Vec<String> {
         let mut sql_ops = Vec::new();
 
         // Author
