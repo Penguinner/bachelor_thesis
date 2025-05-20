@@ -1,6 +1,10 @@
+use crate::parser::Parser;
+use postgres::{Client, NoTls, Row};
+use std::error::Error;
 use std::fs::File;
-use std::io::ErrorKind;
-use postgres::{Client, NoTls};
+use std::io::Read;
+use std::time::Instant;
+use postgres::types::ToSql;
 
 pub struct PostgresConnection {
     client: Client,
@@ -9,7 +13,7 @@ pub struct PostgresConnection {
 impl PostgresConnection {
 
     pub fn new(host: String, user: String) -> Self {
-        let client = Client::connect(format!("host={0} user={1}", host, user), NoTls).unwrap();
+        let client = Client::connect(format!("host={0} user={1}", host, user).as_str(), NoTls).unwrap();
         PostgresConnection {
             client
         }
@@ -27,18 +31,18 @@ impl PostgresConnection {
         for record in parser {
             let ops = record.generate_sql_ops();
             for op in ops {
-                self.client.execute(op.as_ref(),params![]).unwrap();
+                self.client.execute(&op, &[]).unwrap();
             }
         }
     }
 
-    pub fn run_test_query(&self, query: &str, params: Vec<str>, rows: usize, colums: usize) -> Result<u128>{
+    pub fn run_test_query(&mut self, query: &str, params: &[&(dyn ToSql + Sync)], rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
         let now = Instant::now();
         let result : Vec<Row> = self.client.query(query, params)?;
         let duration = now.elapsed().as_millis();
-        if result.len() == rows && result.get(0).len() == columns {
-            Ok(duration)
+        if result.len() == rows && result.get(0).unwrap().len() == columns {
+            return Ok(duration)
         }
-        Err(Error::new(ErrorKind::Other, "Result doesn't match expected size"))
+        Err("Result doesn't match expected size".into())
     }
 }
