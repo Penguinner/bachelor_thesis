@@ -1,3 +1,5 @@
+CREATE DATABASE dblp;
+
 CREATE TABLE IF NOT EXISTS Publications(
     key VARCHAR(255) PRIMARY KEY,
     mdate DATE NOT NULL,

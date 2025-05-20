@@ -1,6 +1,8 @@
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use duckdb::{params, Connection};
+use std::time::Instant;
+use duckdb::{params, params_from_iter, Connection};
 use crate::parser::Parser;
 
 pub struct DuckDBConnection {
@@ -30,5 +32,17 @@ impl DuckDBConnection {
                 self.connection.execute(op.as_ref(),params![]).unwrap();
             }
         }
+    }
+
+    pub fn run_test_query(&self, query: &str, params: Vec<String>, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
+        let mut stmt = self.connection.prepare(query)?;
+        let params = params_from_iter(params);
+        let now = Instant::now();
+        let result = stmt.query(params).unwrap();
+        let duration = now.elapsed().as_millis();
+        if stmt.row_count() == rows && stmt.column_count() == columns {
+            return Ok(duration)
+        }
+        Err("Result doesn't match expected size")?
     }
 }
