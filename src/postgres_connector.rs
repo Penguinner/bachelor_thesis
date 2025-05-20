@@ -4,7 +4,6 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::time::Instant;
-use postgres::types::ToSql;
 
 pub struct PostgresConnection {
     client: Client,
@@ -36,9 +35,9 @@ impl PostgresConnection {
         }
     }
 
-    pub fn run_test_query(&mut self, query: &str, params: &[&(dyn ToSql + Sync)], rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
+    pub fn run_test_query(&mut self, query: &str, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
         let now = Instant::now();
-        let result : Vec<Row> = self.client.query(query, params)?;
+        let result : Vec<Row> = self.client.query(query, &[])?;
         let duration = now.elapsed().as_millis();
         if result.len() == rows && result.get(0).unwrap().len() == columns {
             return Ok(duration)

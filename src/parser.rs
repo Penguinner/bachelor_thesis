@@ -19,7 +19,7 @@ impl Parser {
         let mut reader = Reader::from_reader(BufReader::new(file));
         reader.config_mut().trim_text(true);
         let mut replacements = HashMap::new();
-        let content = read_to_string("src/replacements.txt").unwrap();
+        let content = read_to_string("data/replacements.txt").unwrap();
         for line in content.lines() {
             let splits: Vec<&str> = line.split_whitespace().collect();
             replacements.insert(splits[0].to_owned(), char::from_u32(splits[1].parse::<u32>().unwrap()).unwrap().to_string());
