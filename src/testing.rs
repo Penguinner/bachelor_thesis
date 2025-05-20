@@ -1,8 +1,5 @@
 use std::error::Error;
-use std::ops::Add;
-use std::time::Instant;
 use csv::ReaderBuilder;
-use postgres::Row;
 use serde::Deserialize;
 use crate::duckdb_connector::DuckDBConnection;
 use crate::postgres_connector::PostgresConnection;
@@ -80,7 +77,7 @@ pub fn run_test(filename: String, iterations: usize, mut connection: Connection)
     for (id, record) in queries.iter().enumerate() {
         let mut sub_results:Vec<u128> = Vec::new();
         let mut failures = 0;
-        for i in 0 .. iterations {
+        for _ in 0 .. iterations {
             // setup
             // Clear Cache
             // query
@@ -88,7 +85,7 @@ pub fn run_test(filename: String, iterations: usize, mut connection: Connection)
             // collect result
             match result {
                 Ok(value) => { sub_results.push(value);},
-                Err(e) => {failures += 1;},
+                Err(_) => {failures += 1;},
             }
         }
         results.push(TestResult{id, results: sub_results, failures });

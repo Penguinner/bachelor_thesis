@@ -1,6 +1,4 @@
 use std::error::Error;
-use std::time::Instant;
-use postgres::Row;
 
 pub struct QLeverConnection {
     
