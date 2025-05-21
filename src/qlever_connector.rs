@@ -10,4 +10,9 @@ impl QLeverConnection {
         // TODO
         Err("Result doesn't match expected size".into())
     }
+    
+    pub fn new() -> QLeverConnection {
+        QLeverConnection {
+        }
+    }
 }
