@@ -45,10 +45,8 @@ fn main() {
         };
     // Run Qlever Tests
     if let Some(qlever) = config.qlever {
-        // Start qlever with qlever control
-
         // Create Qlever Connection
-        let connection: Connection = Connection::QLever(QLeverConnection::new());
+        let connection: Connection = Connection::QLever(QLeverConnection::new(qlever.host, qlever.qlever_file));
         // Run Queries
         let results = run_test(config.queries.to_string(),config.iterations,connection)
             .expect("Failed while testing qlever");
