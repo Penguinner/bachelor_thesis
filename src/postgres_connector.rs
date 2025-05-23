@@ -53,4 +53,9 @@ impl PostgresConnection {
         }
         Err("Result doesn't match expected size".into())
     }
+    
+    pub fn close(self) -> Result<(), Box<dyn Error>> {
+        // TODO Implement Close to stop docker container
+        Err("Not Implemented".into())
+    }
 }

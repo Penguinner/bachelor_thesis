@@ -200,11 +200,11 @@ impl Connection {
         }
     }
     
-    pub fn close(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn close(self) -> Result<(), Box<dyn Error>> {
         match self {
             Connection::QLever(connection) => {connection.stop().expect("qlever stop failed");},
-            Connection::DuckDB(_) => {},
-            Connection::PostGres(connection) => {},
+            Connection::DuckDB(connection) => {connection.close().expect("connection close failed");},
+            Connection::PostGres(connection) => {connection.close().expect("connection close failed");},
         }
         Ok(())
     }

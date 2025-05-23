@@ -7,11 +7,12 @@ use crate::parser::Parser;
 
 pub struct DuckDBConnection {
     connection: Connection,
+    dataset: String,
 }
 
 impl DuckDBConnection {
     pub fn new(path: String, dataset: &String, data_dir: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
-        let mut conn = DuckDBConnection { connection: Connection::open(path).unwrap()};
+        let mut conn = DuckDBConnection { connection: Connection::open(path).unwrap(), dataset: dataset .to_string() };
         // TODO Add more datasets
         match dataset.as_str() {
             "dblp" => {
@@ -51,5 +52,11 @@ impl DuckDBConnection {
             return Ok(duration)
         }
         Err("Result doesn't match expected size")?
+    }
+    
+    pub fn close(self) -> Result<(), Box<dyn Error>> {
+        self.connection.execute(format!("DROP DATABASE {}", self.dataset).as_str(), params![])?;
+        self.connection.close().expect("connection close failed");
+        Ok(())
     }
 }

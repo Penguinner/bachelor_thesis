@@ -35,7 +35,8 @@ impl QLeverConnection {
         Ok(())
     }
     
-    pub fn stop(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn stop(self) -> Result<(), Box<dyn Error>> {
+        // TODO Remove data
         Command::new("qlever stop").status().expect("qlever stop failed");
         Ok(())
     }
