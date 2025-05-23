@@ -11,11 +11,18 @@ pub struct PostgresConnection {
 
 impl PostgresConnection {
 
-    pub fn new(host: String, user: String) -> Self {
-        let client = Client::connect(format!("host={0} user={1}", host, user).as_str(), NoTls).unwrap();
-        PostgresConnection {
-            client
+    pub fn new(host: String, dataset: &String, data_dir: &String) -> Result<Self, Box<dyn Error>> {
+        let client = Client::connect(format!("host={0} user=postgres", host).as_str(), NoTls).unwrap();
+        let mut conn = PostgresConnection { client };
+        match dataset.as_str() {
+            "dblp" => {
+                conn.create_tables_dblp();
+                conn.insert_dblp_data(format!("{data_dir}dblp.xml"));
+            },
+            _ => { return Err("dataset could not be resolved for postgres Connection".into())}
         }
+        
+        Ok(conn) 
     }
 
     pub fn create_tables_dblp(&mut self) {

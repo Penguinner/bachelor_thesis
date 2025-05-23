@@ -43,63 +43,37 @@ fn main() {
             },
             _ => (),
         };
-    // Run Qlever Tests
+    // Run Tests
+    let mut tests: Vec<Database> = Vec::new();
     if let Some(qlever) = config.qlever {
-        // Create Qlever Connection
-        let connection: Connection = Connection::QLever(QLeverConnection::new(qlever.host, qlever.qlever_file));
-        // Run Queries
-        let results = run_test(config.queries.to_string(),config.iterations,connection)
-            .expect("Failed while testing qlever");
-        // Save Results
-        if config.raw {
-            write_results(&results, format!("{0}{1}", data_dir, "qlever.raw.tsv"))
-                .expect("Failed while writing raw results of qlever to file");
-        }
-        if config.aggregate {
-            write_results(&results, format!("{0}{1}", data_dir, "qlever.aggregate.tsv"))
-                .expect("Failed while writing aggregate results of qlever to file");
-        }
-        // Clean Up
+        tests.push(Database::QLever(qlever));
     }
-    // Run Postgres Tests
     if let Some(postgres) = config.postgres {
-        // Start Postgres Container
-        
-        // Create Postgres Connection
-        let mut connection: Connection = Connection::PostGres(PostgresConnection::new(postgres.host, "postgres".to_string()));
-        // Intialize Database
-        connection.insert_dblp_data(format!("{data_dir}dblp.xml"));
-        // Run Queries
-        let results = run_test(config.queries.to_string(), config.iterations, connection).expect("Failed while testing Postgres");
-        // Save Results
-        if config.raw {
-            write_results(&results, format!("{0}{1}", data_dir, "postgres.raw.tsv"))
-                .expect("Failed while writing raw results of postgres to file");
-        }
-        if config.aggregate {
-            write_results(&results, format!("{0}{1}", data_dir, "postgres.aggregate.tsv"))
-            .expect("Failed while writing aggregate results of postgres to file");
-        }
-        // Clean Up
+        tests.push(Database::Postgres(postgres));
     }
-    // Run DuckDB Tests
     if let Some(duckdb) = config.duck_db {
-        // Create Duckdb Connection
-        let mut connection: Connection = Connection::DuckDB(DuckDBConnection::new(duckdb.path));
-        // Intialize Database
-        connection.insert_dblp_data(format!("{data_dir}dblp.xml"));
+        tests.push(Database::DuckDB(duckdb));
+    }
+    
+    for test in tests {
+        // Create Connection and insert Data
+        let mut conn = test.to_connection(&data.to_string(), &data_dir.to_string())
+            .expect(format!("Failed to create connection for {}", test.name()).as_str());
         // Run Queries
-        let results = run_test(config.queries.to_string(), config.iterations, connection).expect("Failed while testing DuckDB");
+        let results = run_test(config.queries.to_string(), config.iterations, &mut conn)
+            .expect(format!("Failed while testing for {}", test.name()).as_str());
         // Save Results
         if config.raw {
-            write_results(&results, format!("{0}{1}", data_dir, "duckdb.raw.tsv"))
-                .expect("Failed while writing raw results of duckdb to file");
+            write_results(&results, format!("{0}{1}.raw.tsv", data_dir, test.name()))
+                .expect(format!("Failed while writing raw results of {} to file", test.name()).as_str());
         }
         if config.aggregate {
-            write_results(&results, format!("{0}{1}", data_dir, "duckdb.aggregate.tsv"))
-                .expect("Failed while writing aggregate results of duckdb to file");
+            write_results(&results, format!("{0}{1}.aggregate.tsv", data_dir, test.name()))
+                .expect(format!("Failed while writing aggregate results of {} to file", test.name()).as_str());
         }
         // Clean Up
+        conn.close().expect(format!("Failed to close connection for {}", test.name()).as_str());
+        clear_cache().expect("Failed to clear cache");
     }
 }
 
@@ -111,13 +85,49 @@ struct Config {
     data_directory: Option<String>,
     dataset: String,
     queries: String,
-    qlever: Option<Qlever>,
+    qlever: Option<QLever>,
     postgres: Option<Postgres>,
     duck_db: Option<DuckDb>
 }
 
+enum Database {
+    QLever(QLever),
+    DuckDB(DuckDb),
+    Postgres(Postgres),
+}
+
+impl Database {
+    pub fn name(&self) -> &str {
+        match self {
+            Database::QLever(_) => "qlever",
+            Database::DuckDB(_) => "duckdb",
+            Database::Postgres(_) => "postgres",
+        }
+    }
+    
+    pub fn to_connection(&self, dataset: &String, data_dir: &String) -> Result<Connection, Box<dyn Error>> {
+        match self {
+            Database::QLever(qlever) => {
+                Ok(Connection::QLever(QLeverConnection::new(qlever.host.to_string(), qlever.qlever_file.to_string())))
+            },
+            Database::DuckDB(duckdb) => {
+                let duck = DuckDBConnection::new(duckdb.path.to_string(), dataset, data_dir)?;
+                Ok(Connection::DuckDB(duck))
+            },
+            Database::Postgres(postgres) => {
+                let post = PostgresConnection::new(
+                    postgres.host.to_string(),
+                    dataset,
+                    data_dir,
+                )?;
+                Ok(Connection::PostGres(post))
+            },
+        }
+    }
+}
+
 #[derive(Deserialize)]
-struct Qlever {
+struct QLever {
     host : String,
     qlever_file: String,
 }
@@ -188,6 +198,15 @@ impl Connection {
             _ => ()
         }
     }
+    
+    pub fn close(&mut self) -> Result<(), Box<dyn Error>> {
+        match self {
+            Connection::QLever(connection) => {connection.stop().expect("qlever stop failed");},
+            Connection::DuckDB(_) => {},
+            Connection::PostGres(connection) => {},
+        }
+        Ok(())
+    }
 }
 
 pub struct TestResult {
@@ -214,18 +233,13 @@ impl TestResult {
     }
 }
 
-pub fn run_test(filename: String, iterations: usize, mut connection: Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
+pub fn run_test(filename: String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
     let mut failures: Vec<usize> = Vec::new();
     let mut results: Vec<Vec<u128>> = Vec::new();
 
     for _ in 0 .. iterations {
-        // Clear Cache
-        let sync = Command::new("sync").status().expect("Failed running sync");
-        if !sync.success() {
-            return Err("Failed running sync".into());
-        }
-        File::create("/proc/sys/vm/drop_caches")?.write_all(b"3\n")?;
+        clear_cache().expect("Failed to clear cache");
         // Run Queries
         for (id, record) in queries.iter().enumerate() {
             let result = connection.run_test_query(record);
@@ -240,6 +254,16 @@ pub fn run_test(filename: String, iterations: usize, mut connection: Connection)
     }).collect();
     
     Ok(results)
+}
+
+fn clear_cache() -> Result<(), Box<dyn Error>> {
+    // Clear Cache
+    let sync = Command::new("sync").status().expect("Failed running sync");
+    if !sync.success() {
+        return Err("Failed running sync".into());
+    }
+    File::create("/proc/sys/vm/drop_caches")?.write_all(b"3\n")?;
+    Ok(())
 }
 
 pub fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {

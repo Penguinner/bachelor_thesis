@@ -35,6 +35,11 @@ impl QLeverConnection {
         Ok(())
     }
     
+    pub fn stop(&mut self) -> Result<(), Box<dyn Error>> {
+        Command::new("qlever stop").status().expect("qlever stop failed");
+        Ok(())
+    }
+    
     async fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
         let client = Client::new();
         let response = client.post(self.host.clone())

@@ -10,10 +10,17 @@ pub struct DuckDBConnection {
 }
 
 impl DuckDBConnection {
-    pub fn new(path: String) -> DuckDBConnection {
-        DuckDBConnection {
-            connection: Connection::open(path).unwrap(),
+    pub fn new(path: String, dataset: &String, data_dir: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
+        let mut conn = DuckDBConnection { connection: Connection::open(path).unwrap()};
+        match dataset.as_str() {
+            "dblp" => {
+                conn.create_tables_dblp();
+                conn.insert_dblp_data(format!("{data_dir}dblp.xml"));
+            },
+            _ => { return Err("dataset could not be resolved for duckdb Connection".into())}
         }
+        
+        Ok(conn)
     }
 
     pub fn create_tables_dblp(&mut self) {
