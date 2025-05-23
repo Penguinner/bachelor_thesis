@@ -12,6 +12,7 @@ pub struct DuckDBConnection {
 impl DuckDBConnection {
     pub fn new(path: String, dataset: &String, data_dir: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
         let mut conn = DuckDBConnection { connection: Connection::open(path).unwrap()};
+        // TODO Add more datasets
         match dataset.as_str() {
             "dblp" => {
                 conn.create_tables_dblp();
@@ -19,12 +20,12 @@ impl DuckDBConnection {
             },
             _ => { return Err("dataset could not be resolved for duckdb Connection".into())}
         }
-        
+
         Ok(conn)
     }
 
     pub fn create_tables_dblp(&mut self) {
-        let mut file = File::open("create_tables.sql").unwrap();
+        let mut file = File::open("create_tables_dblp.sql").unwrap();
         let mut query = String::new();
         file.read_to_string(&mut query).unwrap();
         query = format!("BEGIN;\n {}\n COMMIT;", query);

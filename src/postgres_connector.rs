@@ -12,8 +12,10 @@ pub struct PostgresConnection {
 impl PostgresConnection {
 
     pub fn new(host: String, dataset: &String, data_dir: &String) -> Result<Self, Box<dyn Error>> {
+        // TODO Startup Docker container
         let client = Client::connect(format!("host={0} user=postgres", host).as_str(), NoTls).unwrap();
         let mut conn = PostgresConnection { client };
+        // TODO add more datasets
         match dataset.as_str() {
             "dblp" => {
                 conn.create_tables_dblp();
@@ -21,12 +23,12 @@ impl PostgresConnection {
             },
             _ => { return Err("dataset could not be resolved for postgres Connection".into())}
         }
-        
-        Ok(conn) 
+
+        Ok(conn)
     }
 
     pub fn create_tables_dblp(&mut self) {
-        let mut file = File::open("create_tables.sql").unwrap();
+        let mut file = File::open("create_tables_dblp.sql").unwrap();
         let mut query = String::new();
         file.read_to_string(&mut query).unwrap();
         self.client.batch_execute(&query).unwrap();

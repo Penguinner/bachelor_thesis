@@ -34,6 +34,7 @@ fn main() {
     let _ = File::open(test_file).unwrap().read_to_string(&mut data);
     let config = toml::from_str::<Config>(data.as_str()).unwrap();
     let data_dir = if config.data_directory.is_some() {config.data_directory.as_ref().unwrap().as_str()} else {"./"};
+    // TODO add more datasets
     match config.dataset.as_ref() {
             "dblp" => {
                 let rt = Runtime::new().unwrap();
