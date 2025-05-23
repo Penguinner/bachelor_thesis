@@ -9,8 +9,10 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
+use std::ops::AddAssign;
 use std::path::PathBuf;
+use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
@@ -216,33 +218,33 @@ impl TestResult {
 
 pub fn run_test(filename: String, iterations: usize, mut connection: Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
+    let mut failures: Vec<usize> = Vec::new();
+    let mut results: Vec<Vec<u128>> = Vec::new();
 
-    let mut results: Vec<TestResult> = Vec::new();
-
-    for (id, record) in queries.iter().enumerate() {
-        let mut sub_results:Vec<u128> = Vec::new();
-        let mut failures = 0;
-        for _ in 0 .. iterations {
-            // setup
-            // Clear Cache
-
-            // query
+    for _ in 0 .. iterations {
+        // Clear Cache
+        let sync = Command::new("sync").status().expect("Failed running sync");
+        if !sync.success() {
+            return Err("Failed running sync".into());
+        }
+        File::create("/proc/sys/vm/drop_caches")?.write_all(b"3\n")?;
+        // Run Queries
+        for (id, record) in queries.iter().enumerate() {
             let result = connection.run_test_query(record);
-            // collect result
             match result {
-                Ok(value) => { sub_results.push(value);},
-                Err(_) => {failures += 1;},
+                Ok(value) => results[id].push(value),
+                Err(_) => failures[id].add_assign(1)
             }
         }
-        results.push(TestResult{id, results: sub_results, failures });
     }
+   let results =  results.iter().enumerate().map(|(index, value) | {
+        TestResult {id: index, results: value.clone(), failures: failures[index].clone() }
+    }).collect();
+    
     Ok(results)
 }
 
 pub fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
-    /*
-        id\tfailures\tvalue\tvalue
-    */
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .has_headers(true)
