@@ -4,17 +4,61 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::time::Instant;
+use bollard::Docker;
+use bollard::models::ContainerCreateBody;
+use bollard::query_parameters::CreateContainerOptionsBuilder;
+use futures::TryStreamExt;
+use tokio::runtime::Runtime;
 
 pub struct PostgresConnection {
     client: Client,
+    dataset: String,
+    docker_id: String,
 }
 
 impl PostgresConnection {
 
     pub fn new(host: String, dataset: &String, data_dir: &String) -> Result<Self, Box<dyn Error>> {
-        // TODO Startup Docker container
+        // Startup Docker container
+        let rt = Runtime::new()?;
+        let handle = rt.handle();
+        let id = handle.block_on(async {
+            let docker = Docker::connect_with_http_defaults().unwrap();
+
+            docker.create_image(
+                Some(
+                    bollard::query_parameters::CreateImageOptionsBuilder::default()
+                        .from_image("postgres:latest")
+                        .build(),
+                ),
+                None,
+                None,
+            )
+                .try_collect::<Vec<_>>()
+                .await.expect("Failed Creating Docker Image");
+            
+            let config = ContainerCreateBody {
+                image: Some("postgres:latest".into()),
+                
+                ..Default::default()
+            };
+            
+            let options = CreateContainerOptionsBuilder::default().name("postgres").build();
+            
+            let id = docker.create_container(
+                Some(options),
+                config,
+            )
+                .await
+                .expect("Failed to create Docker Container")
+                .id;
+            docker.start_container(&id, None::<bollard::query_parameters::StartContainerOptions>).await.expect("Failed to start Docker Container");
+            id
+        });
+        
+        // Connect to Postgres DB
         let client = Client::connect(format!("host={0} user=postgres", host).as_str(), NoTls).unwrap();
-        let mut conn = PostgresConnection { client };
+        let mut conn = PostgresConnection { client, dataset: dataset.into(), docker_id: id};
         // TODO add more datasets
         match dataset.as_str() {
             "dblp" => {
@@ -54,8 +98,23 @@ impl PostgresConnection {
         Err("Result doesn't match expected size".into())
     }
     
-    pub fn close(self) -> Result<(), Box<dyn Error>> {
-        // TODO Implement Close to stop docker container
-        Err("Not Implemented".into())
+    pub fn close(mut self) -> Result<(), Box<dyn Error>> {
+        self.client.execute(format!("DROP DATABASE {}", self.dataset).as_str(), &[])?;
+        self.client.close().expect("close failed");
+        //Stop docker container
+        let rt = Runtime::new()?;
+        let handle = rt.handle();
+        
+        handle.block_on(async {
+           let docker = Docker::connect_with_http_defaults().unwrap();
+            
+            docker.stop_container(
+                self.docker_id.as_str(),
+                None::<bollard::query_parameters::StopContainerOptions>
+            ).await.unwrap();
+            
+            docker.remove_container(self.docker_id.as_str(), None::<bollard::query_parameters::RemoveContainerOptions>).await.unwrap();
+        });
+        Ok(())
     }
 }
