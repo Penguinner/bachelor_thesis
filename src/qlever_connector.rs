@@ -21,10 +21,14 @@ impl QLeverConnection {
         Ok(result.0)
     }
     
-    pub fn new(host: String, qlever_file: String) -> QLeverConnection {
-        let mut conn = QLeverConnection { host , qlever_file };
-        conn.startup().expect("Failed while starting qlever connection");
-        conn
+    pub fn new(dataset: &String) -> Result<QLeverConnection, Box<dyn Error>> {
+        let qlever_file = match dataset.as_str() {
+            "dblp" => "Qleverfile.dblp".to_string(),
+            _ => return Err("Invalid dataset for qlever".into()),
+        };
+        let mut conn = QLeverConnection { host: "http://localhost:7027".into() , qlever_file };
+        conn.startup()?;
+        Ok(conn)
     }
     
     fn startup(&mut self) -> Result<(), Box<dyn Error>> {

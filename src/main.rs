@@ -2,14 +2,14 @@ use crate::duckdb_connector::DuckDBConnection;
 use crate::postgres_connector::PostgresConnection;
 use crate::qlever_connector::QLeverConnection;
 use async_compression::tokio::bufread::GzipDecoder;
-use clap::{arg, command, value_parser};
+use clap::{command, value_parser, Arg, ArgAction};
 use csv::ReaderBuilder;
 use futures::TryStreamExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::ops::AddAssign;
 use std::path::PathBuf;
 use std::process::Command;
@@ -23,53 +23,108 @@ mod postgres_connector;
 mod qlever_connector;
 
 fn main() {
+    // CLI Setup
     let matches = command!()
-        .arg(arg!(-t --test_file <FILE> "Sets test file.")
-                 .required(false)
-                 .value_parser(value_parser!(PathBuf)),
+        .arg(
+            Arg::new("query_file")
+                .value_parser(value_parser!(PathBuf))
+                .help("path to a query file with the tsv format: (name sql sparql columns rows)")
+                .required(true)
+        )
+        .arg(
+            Arg::new("data_set")
+                .value_parser(["dblp"])
+                .help("dataset to use for this test run")
+                .required(true)
+        )
+        .arg(
+            Arg::new("iter")
+                .short('i')
+                .long("iter")
+                .value_parser(value_parser!(usize))
+                .default_value("1")
+                .help("how often queries are repeated")
+                .required(false)
+        )
+        .arg(
+            Arg::new("aggregate")
+                .short('a')
+                .long("aggregate")
+                .action(ArgAction::SetTrue)
+                .help("save aggregated results to tsv file")
+                .required(false)
+        )
+        .arg(
+            Arg::new("raw")
+                .short('r')
+                .long("raw")
+                .action(ArgAction::SetTrue)
+                .help("save raw results to tsv file")
+                .required(false)
+        )
+        .arg(
+            Arg::new("qlever")
+                .short('q')
+                .long("qlever")
+                .action(ArgAction::SetTrue)
+                .required(false)
+            )
+        .arg(
+            Arg::new("postgres")
+                .short('p')
+                .long("postgres")
+                .action(ArgAction::SetTrue)
+                .required(false)
+        )
+        .arg(
+            Arg::new("duckdb")
+                .short('d')
+                .long("duckdb")
+                .action(ArgAction::SetTrue)
+                .required(false)
         )
         .get_matches();
-    let test_file: PathBuf= matches.get_one::<PathBuf>("-t").expect("Couldn't read path").into();
-    let mut data = String::new();
-    let _ = File::open(test_file).unwrap().read_to_string(&mut data);
-    let config = toml::from_str::<Config>(data.as_str()).unwrap();
-    let data_dir = if config.data_directory.is_some() {config.data_directory.as_ref().unwrap().as_str()} else {"./"};
+    
+    let queries = matches.get_one::<String>("query_file").expect("No 'query_file' argument");
+    let data_set = matches.get_one::<String>("data_set")
+        .expect("data_set is required");
+    let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
     // TODO add more datasets
-    match config.dataset.as_ref() {
+    match data_set.as_ref() {
             "dblp" => {
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
                 
-                let _ = handle.block_on(download_dblp_data(format!("{data_dir}dblp.xml")));
+                let _ = handle.block_on(download_dblp_data("./data/dblp.xml".into()));
             },
             _ => (),
         };
     // Run Tests
     let mut tests: Vec<Database> = Vec::new();
-    if let Some(qlever) = config.qlever {
-        tests.push(Database::QLever(qlever));
+    if matches.get_flag("qlever") {
+        tests.push(Database::QLever);
     }
-    if let Some(postgres) = config.postgres {
-        tests.push(Database::Postgres(postgres));
+    if matches.get_flag("postgres") {
+        tests.push(Database::Postgres);
     }
-    if let Some(duckdb) = config.duck_db {
-        tests.push(Database::DuckDB(duckdb));
+    if matches.get_flag("duckdb") {
+        tests.push(Database::DuckDB);
     }
     
     for test in tests {
         // Create Connection and insert Data
-        let mut conn = test.to_connection(&data.to_string(), &data_dir.to_string())
+        let mut conn = test.to_connection(&data_set.to_string())
             .expect(format!("Failed to create connection for {}", test.name()).as_str());
         // Run Queries
-        let results = run_test(config.queries.to_string(), config.iterations, &mut conn)
+        let results = run_test(queries, iter, &mut conn)
             .expect(format!("Failed while testing for {}", test.name()).as_str());
         // Save Results
-        if config.raw {
-            write_results(&results, format!("{0}{1}.raw.tsv", data_dir, test.name()))
+        if matches.get_flag("raw") {
+            write_results(&results, format!("./data/{}.raw.tsv", test.name()))
                 .expect(format!("Failed while writing raw results of {} to file", test.name()).as_str());
         }
-        if config.aggregate {
-            write_results(&results, format!("{0}{1}.aggregate.tsv", data_dir, test.name()))
+        if matches.get_flag("aggregate") {
+            write_results(&results, format!("./data/{}.aggregate.tsv", test.name()))
                 .expect(format!("Failed while writing aggregate results of {} to file", test.name()).as_str());
         }
         // Clean Up
@@ -78,69 +133,28 @@ fn main() {
     }
 }
 
-#[derive(Deserialize)]
-struct Config {
-    iterations: usize,
-    aggregate: bool,
-    raw: bool,
-    data_directory: Option<String>,
-    dataset: String,
-    queries: String,
-    qlever: Option<QLever>,
-    postgres: Option<Postgres>,
-    duck_db: Option<DuckDb>
-}
-
 enum Database {
-    QLever(QLever),
-    DuckDB(DuckDb),
-    Postgres(Postgres),
+    QLever,
+    DuckDB,
+    Postgres,
 }
 
 impl Database {
     pub fn name(&self) -> &str {
         match self {
-            Database::QLever(_) => "qlever",
-            Database::DuckDB(_) => "duckdb",
-            Database::Postgres(_) => "postgres",
+            Database::QLever => "qlever",
+            Database::DuckDB => "duckdb",
+            Database::Postgres => "postgres",
         }
     }
     
-    pub fn to_connection(&self, dataset: &String, data_dir: &String) -> Result<Connection, Box<dyn Error>> {
+    pub fn to_connection(&self, dataset: &String) -> Result<Connection, Box<dyn Error>> {
         match self {
-            Database::QLever(qlever) => {
-                Ok(Connection::QLever(QLeverConnection::new(qlever.host.to_string(), qlever.qlever_file.to_string())))
-            },
-            Database::DuckDB(duckdb) => {
-                let duck = DuckDBConnection::new(duckdb.path.to_string(), dataset, data_dir)?;
-                Ok(Connection::DuckDB(duck))
-            },
-            Database::Postgres(postgres) => {
-                let post = PostgresConnection::new(
-                    postgres.host.to_string(),
-                    dataset,
-                    data_dir,
-                )?;
-                Ok(Connection::PostGres(post))
-            },
+            Database::QLever =>  Ok(Connection::QLever(QLeverConnection::new(dataset)?)),
+            Database::DuckDB => Ok(Connection::DuckDB(DuckDBConnection::new(dataset)?)),
+            Database::Postgres => Ok(Connection::PostGres(PostgresConnection::new(dataset)?)),
         }
     }
-}
-
-#[derive(Deserialize)]
-struct QLever {
-    host : String,
-    qlever_file: String,
-}
-
-#[derive(Deserialize)]
-struct Postgres {
-    host : String,
-}
-
-#[derive(Deserialize)]
-struct DuckDb {
-    path: String,
 }
 
 pub enum QueryLang {
@@ -234,7 +248,7 @@ impl TestResult {
     }
 }
 
-pub fn run_test(filename: String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
+pub fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
     let mut failures: Vec<usize> = Vec::new();
     let mut results: Vec<Vec<u128>> = Vec::new();

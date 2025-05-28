@@ -11,13 +11,13 @@ pub struct DuckDBConnection {
 }
 
 impl DuckDBConnection {
-    pub fn new(path: String, dataset: &String, data_dir: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
-        let mut conn = DuckDBConnection { connection: Connection::open(path).unwrap(), dataset: dataset .to_string() };
+    pub fn new(dataset: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
+        let mut conn = DuckDBConnection { connection: Connection::open("./data/db.duckdb").unwrap(), dataset: dataset .to_string() };
         // TODO Add more datasets
         match dataset.as_str() {
             "dblp" => {
                 conn.create_tables_dblp();
-                conn.insert_dblp_data(format!("{data_dir}dblp.xml"));
+                conn.insert_dblp_data("data/dblp.xml".to_string());
             },
             _ => { return Err("dataset could not be resolved for duckdb Connection".into())}
         }
