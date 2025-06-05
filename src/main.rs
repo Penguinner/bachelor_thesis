@@ -124,7 +124,7 @@ fn main() {
                 .expect(format!("Failed while writing raw results of {} to file", test.name()).as_str());
         }
         if matches.get_flag("aggregate") {
-            write_results(&results, format!("./data/{}.aggregate.tsv", test.name()))
+            write_results_aggregated(&results, format!("./data/{}.aggregate.tsv", test.name()))
                 .expect(format!("Failed while writing aggregate results of {} to file", test.name()).as_str());
         }
         // Clean Up
@@ -231,14 +231,6 @@ pub struct TestResult {
 }
 
 impl TestResult {
-    pub fn add_result(&mut self, result: u128) {
-        self.results.push(result);
-    }
-
-    pub fn register_failure(&mut self) {
-        self.failures += 1;
-    }
-
     pub fn to_tsv_record(&self) -> Vec<String> {
         let mut results: Vec<String> = Vec::new();
         results.push(self.id.to_string());
@@ -248,7 +240,7 @@ impl TestResult {
     }
 }
 
-pub fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
+fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
     let mut failures: Vec<usize> = Vec::new();
     let mut results: Vec<Vec<u128>> = Vec::new();
@@ -281,7 +273,7 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
+fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .has_headers(true)
@@ -296,7 +288,7 @@ pub fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), 
     Ok(())
 }
 
-pub fn write_results_aggregated(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
+fn write_results_aggregated(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .has_headers(true)

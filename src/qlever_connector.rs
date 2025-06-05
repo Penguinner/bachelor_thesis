@@ -77,8 +77,6 @@ struct JsonResult {
 
 #[derive(Deserialize)]
 struct JsonTime {
-    #[serde(rename = "computeResult")]
-    compute_result: String,
     total: String,
 }
 
