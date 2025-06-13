@@ -7,10 +7,75 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{read_to_string, File};
 use std::io::BufReader;
+use phf::phf_map;
+
+pub static ENTITY_MAP: phf::Map<&'static str, &'static str> = phf_map! {
+    "Agrave" => "\u{00C0}",  // À
+    "Aacute" => "\u{00C1}",  // Á
+    "Acirc" => "\u{00C2}",   // Â
+    "Atilde" => "\u{00C3}",  // Ã
+    "Auml" => "\u{00C4}",    // Ä
+    "Aring" => "\u{00C5}",   // Å
+    "AElig" => "\u{00C6}",   // Æ
+    "Ccedil" => "\u{00C7}",  // Ç
+    "Egrave" => "\u{00C8}",  // È
+    "Eacute" => "\u{00C9}",  // É
+    "Ecirc" => "\u{00CA}",   // Ê
+    "Euml" => "\u{00CB}",    // Ë
+    "Igrave" => "\u{00CC}",  // Ì
+    "Iacute" => "\u{00CD}",  // Í
+    "Icirc" => "\u{00CE}",   // Î
+    "Iuml" => "\u{00CF}",    // Ï
+    "ETH" => "\u{00D0}",     // Ð
+    "Ntilde" => "\u{00D1}",  // Ñ
+    "Ograve" => "\u{00D2}",  // Ò
+    "Oacute" => "\u{00D3}",  // Ó
+    "Ocirc" => "\u{00D4}",   // Ô
+    "Otilde" => "\u{00D5}",  // Õ
+    "Ouml" => "\u{00D6}",    // Ö
+    "Oslash" => "\u{00D8}",  // Ø
+    "Ugrave" => "\u{00D9}",  // Ù
+    "Uacute" => "\u{00DA}",  // Ú
+    "Ucirc" => "\u{00DB}",   // Û
+    "Uuml" => "\u{00DC}",    // Ü
+    "Yacute" => "\u{00DD}",  // Ý
+    "THORN" => "\u{00DE}",   // Þ
+    "szlig" => "\u{00DF}",   // ß
+    "agrave" => "\u{00E0}",  // à
+    "aacute" => "\u{00E1}",  // á
+    "acirc" => "\u{00E2}",   // â
+    "atilde" => "\u{00E3}",  // ã
+    "auml" => "\u{00E4}",    // ä
+    "aring" => "\u{00E5}",   // å
+    "aelig" => "\u{00E6}",   // æ
+    "ccedil" => "\u{00E7}",  // ç
+    "egrave" => "\u{00E8}",  // è
+    "eacute" => "\u{00E9}",  // é
+    "ecirc" => "\u{00EA}",   // ê
+    "euml" => "\u{00EB}",    // ë
+    "igrave" => "\u{00EC}",  // ì
+    "iacute" => "\u{00ED}",  // í
+    "icirc" => "\u{00EE}",   // î
+    "iuml" => "\u{00EF}",    // ï
+    "eth" => "\u{00F0}",     // ð
+    "ntilde" => "\u{00F1}",  // ñ
+    "ograve" => "\u{00F2}",  // ò
+    "oacute" => "\u{00F3}",  // ó
+    "ocirc" => "\u{00F4}",   // ô
+    "otilde" => "\u{00F5}",  // õ
+    "ouml" => "\u{00F6}",    // ö
+    "oslash" => "\u{00F8}",  // ø
+    "ugrave" => "\u{00F9}",  // ù
+    "uacute" => "\u{00FA}",  // ú
+    "ucirc" => "\u{00FB}",   // û
+    "uuml" => "\u{00FC}",    // ü
+    "yacute" => "\u{00FD}",  // ý
+    "thorn" => "\u{00FE}",   // þ
+    "yuml" => "\u{00FF}",    // ÿ
+};
 
 pub struct Parser {
     reader: Reader<BufReader<File>>,
-    replacements: HashMap<String, String>,
 }
 
 impl Parser {
@@ -18,13 +83,7 @@ impl Parser {
         let file = File::open(file).unwrap();
         let mut reader = Reader::from_reader(BufReader::new(file));
         reader.config_mut().trim_text(true);
-        let mut replacements = HashMap::new();
-        let content = read_to_string("data/replacements.txt").unwrap();
-        for line in content.lines() {
-            let splits: Vec<&str> = line.split_whitespace().collect();
-            replacements.insert(splits[0].to_owned(), char::from_u32(splits[1].parse::<u32>().unwrap()).unwrap().to_string());
-        }
-        Parser { reader, replacements }
+        Parser { reader}
     }
 
     fn is_publication(tag: &[u8]) -> bool {
@@ -147,12 +206,11 @@ impl Parser {
             Ok(Event::Text(e)) => {
                 let a = e.unescape()?.into_owned();
                 let re = Regex::new(r"&(\w+);").unwrap();
-                let replacements = &self.replacements;
                 let result = re.replace_all(&a, |caps: &regex::Captures| {
                     let key = &caps[1];
-                    match replacements.get(key) {
-                        Some(v) => Cow::Borrowed(v.as_str()),
-                        None => Cow::Owned(caps[0].to_owned()),
+                    match ENTITY_MAP.get(key) {
+                        Some(&char_str) => Cow::Borrowed(char_str),
+                        None => Cow::Owned(caps[0].to_string()),
                     }
                 });
                 Ok(result.to_string())
@@ -196,10 +254,10 @@ pub enum Record {
 }
 
 impl Record {
-    pub fn generate_sql_ops(&self) -> Vec<String> {
+    pub fn generate_sql_ops(&self) -> (Vec<String>,Vec<String>) {
         match self {
             Record::Publication(publication) => publication.to_owned().generate_sql_ops(),
-            Record::Person(person) => person.to_owned().generate_sql_ops(),
+            Record::Person(person) => (person.to_owned().generate_sql_ops(), Vec::new()),
         }
     }
 }
@@ -250,8 +308,9 @@ impl Publication {
         }
     }
 
-    pub fn generate_sql_ops(&self) -> Vec<String> {
+    pub fn generate_sql_ops(&self) -> (Vec<String>,Vec<String>) {
         let mut sql_ops = Vec::new();
+        let mut ref_sql_ops = Vec::new(); 
         // Venues
         let mut venue_name = String::new();
         let mut venue_type = String::new();
@@ -270,64 +329,12 @@ impl Publication {
             }
             _ => ()
         };
+        // Venue
         if !venue_name.is_empty() && !venue_type.is_empty() {
             sql_ops.push(
                 format!(
-                    "INSERT INTO Venues (name, type) VALUES('{0}', '{1}');",
+                    "INSERT INTO Venues (name, type) VALUES('{0}', '{1}') ON CONFLICT DO NOTHING;",
                 venue_name, venue_type)
-            );
-        }
-        // Authors
-        for author in &self.authors {
-            sql_ops.push(
-                format!(
-                    "INSERT INTO Authors (name, id) VALUES ('{0}', '{1}');",
-                    author.name, author.id
-                )
-            );
-            sql_ops.push(
-                format!(
-                    "INSERT INTO PublicationAuthors (publication_key, author_id) VALUES ('{0}', '{1}') ON CONFLICT DO NOTHING;",
-                    self.key,
-                    format!(
-                        "SELECT id FROM WHERE name = '{0}' AND id = '{1}'",
-                        author.name, author.id
-                    )
-                )
-            );
-        }
-        // Resources
-        for resource in &self.resources {
-            sql_ops.push(
-              format!(
-                  "INSERT INTO Resources (type, value, publication_key) VALUES ('{0}', '{1}', '{2}');",
-                  resource.0, resource.1, self.key
-              )
-            );
-        }
-        // Refrences
-        for reference in &self.references {
-            sql_ops.push(
-                format!(
-                    "INSERT INTO Reference (type, origin_pub, dest_pub) VALUES ('{0}', '{1}', '{2}');",
-                    reference.0, self.key, reference.1
-                )
-            );
-        }
-        // Editors
-        for editor in &self.editor {
-            sql_ops.push(
-                format!(
-                    "INSERT INTO Editors (name) VALUES ('{0}') ON CONFLICT DO NOTHING;",
-                    editor
-                )
-            );
-            sql_ops.push(
-                format!(
-                    "INSERT INTO PublicationEditors (publication_key, editor_id) VALUES ('{0}', '{1}') ON CONFLICT DO NOTHING;",
-                    self.key,
-                    format!("(SELECT id FROM Editors WHERE name = '{}')", editor),
-                )
             );
         }
         // Publisher
@@ -398,7 +405,60 @@ impl Publication {
                 extra_values
             )
         );
-        sql_ops
+        // Authors
+        for author in &self.authors {
+            sql_ops.push(
+                format!(
+                    "INSERT INTO Authors (name, id) VALUES ('{0}', '{1}');",
+                    author.name, author.id
+                )
+            );
+            sql_ops.push(
+                format!(
+                    "INSERT INTO PublicationAuthors (publication_key, author_id) VALUES ('{0}', '{1}') ON CONFLICT DO NOTHING;",
+                    self.key,
+                    format!(
+                        "SELECT id FROM WHERE name = '{0}' AND id = '{1}'",
+                        author.name, author.id
+                    )
+                )
+            );
+        }
+        // Resources
+        for resource in &self.resources {
+            sql_ops.push(
+                format!(
+                    "INSERT INTO Resources (type, value, publication_key) VALUES ('{0}', '{1}', '{2}');",
+                    resource.0, resource.1, self.key
+                )
+            );
+        }
+        // Refrences
+        for reference in &self.references {
+            ref_sql_ops.push(
+                format!(
+                    "INSERT INTO Reference (type, origin_pub, dest_pub) VALUES ('{0}', '{1}', '{2}');",
+                    reference.0, self.key, reference.1
+                )
+            );
+        }
+        // Editors
+        for editor in &self.editor {
+            sql_ops.push(
+                format!(
+                    "INSERT INTO Editors (name) VALUES ('{0}') ON CONFLICT DO NOTHING;",
+                    editor
+                )
+            );
+            sql_ops.push(
+                format!(
+                    "INSERT INTO PublicationEditors (publication_key, editor_id) VALUES ('{0}', '{1}') ON CONFLICT DO NOTHING;",
+                    self.key,
+                    format!("(SELECT id FROM Editors WHERE name = '{}')", editor),
+                )
+            );
+        }
+        (sql_ops,ref_sql_ops)
     }
 }
 
