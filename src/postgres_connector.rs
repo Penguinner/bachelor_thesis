@@ -1,3 +1,4 @@
+use postgres::types::ToSql;
 use crate::parser::Parser;
 use postgres::{Client, NoTls, Row};
 use std::error::Error;
@@ -23,7 +24,7 @@ impl PostgresConnection {
         let rt = Runtime::new()?;
         let handle = rt.handle();
         let id = handle.block_on(async {
-            let docker = Docker::connect_with_http_defaults().unwrap();
+            let docker = Docker::connect_with_defaults().unwrap();
 
             docker.create_image(
                 Some(
@@ -80,11 +81,21 @@ impl PostgresConnection {
 
     pub fn insert_dblp_data(&mut self, file: String) {
         let parser = Parser::new(file.as_ref());
+        let mut ref_ops = Vec::new();
         for record in parser {
-            let ops = record.generate_sql_ops();
-            for op in ops {
-                self.client.execute(&op, &[]).unwrap();
+            let ops: (Vec<(String, Vec<String>)>, Vec<(String, Vec<String>)>) = record.generate_sql_ops('$');
+            ref_ops.append(&mut ops.1.clone());
+            for op in ops.0 {
+                let params: Vec<&(dyn ToSql + Sync)> =
+                    op.1.iter().map(|s| s as &(dyn ToSql + Sync)).collect();
+                self.client.execute(&op.0, &params).unwrap();
             }
+        }
+        
+        for op in ref_ops {
+            let params: Vec<&(dyn ToSql + Sync)> =
+                op.1.iter().map(|s| s as &(dyn ToSql + Sync)).collect();
+            self.client.execute(&op.0, &params).unwrap();
         }
     }
 
@@ -99,14 +110,14 @@ impl PostgresConnection {
     }
     
     pub fn close(mut self) -> Result<(), Box<dyn Error>> {
-        self.client.execute(format!("DROP DATABASE {}", self.dataset).as_str(), &[])?;
+        // TODO Clear Data
         self.client.close().expect("close failed");
         //Stop docker container
         let rt = Runtime::new()?;
         let handle = rt.handle();
         
         handle.block_on(async {
-           let docker = Docker::connect_with_http_defaults().unwrap();
+           let docker = Docker::connect_with_defaults().unwrap();
             
             docker.stop_container(
                 self.docker_id.as_str(),

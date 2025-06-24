@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 use std::process::Command;
 use reqwest::Client;
@@ -23,7 +24,7 @@ impl QLeverConnection {
     
     pub fn new(dataset: &String) -> Result<QLeverConnection, Box<dyn Error>> {
         let qlever_file = match dataset.as_str() {
-            "dblp" => "Qleverfile.dblp".to_string(),
+            "dblp" => "dblp".to_string(),
             _ => return Err("Invalid dataset for qlever".into()),
         };
         let mut conn = QLeverConnection { host: "http://localhost:7027".into() , qlever_file };
@@ -32,15 +33,17 @@ impl QLeverConnection {
     }
     
     fn startup(&mut self) -> Result<(), Box<dyn Error>> {
+        Command::new(format!("mkdir src/data/{}", &self.qlever_file));
         Command::new(format!("qlever setup-config {}", self.qlever_file)).status().expect("qlever setup-config failed");
         Command::new("qlever get-data").status().expect("qlever get data failed");
         Command::new("qlever index").status().expect("qlever index failed");
         Command::new("qlever start").status().expect("qlever start failed");
         Ok(())
     }
-    
+     
     pub fn stop(self) -> Result<(), Box<dyn Error>> {
-        // TODO Remove data
+        Command::new("cd ../../..");
+        Command::new("rm -r ./src/data/dblp");
         Command::new("qlever stop").status().expect("qlever stop failed");
         Ok(())
     }

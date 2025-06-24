@@ -11,7 +11,6 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::ops::AddAssign;
-use std::path::PathBuf;
 use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
@@ -27,7 +26,7 @@ fn main() {
     let matches = command!()
         .arg(
             Arg::new("query_file")
-                .value_parser(value_parser!(PathBuf))
+                .value_parser(value_parser!(String))
                 .help("path to a query file with the tsv format: (name sql sparql columns rows)")
                 .required(true)
         )
@@ -95,7 +94,7 @@ fn main() {
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
                 
-                let _ = handle.block_on(download_dblp_data("./data/dblp.xml".into()));
+                let _ = handle.block_on(download_dblp_data("./src/data/dblp.xml".into()));
             },
             _ => (),
         };
@@ -345,5 +344,6 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
     decoder.read_to_end(&mut buffer).await?;
     output_file.write_all(&buffer).await?;
     
+    println!("Download successful");
     Ok(())
 }

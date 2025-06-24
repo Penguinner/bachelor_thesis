@@ -1,78 +1,12 @@
+use std::array::IntoIter;
+use quick_xml::Reader;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
-use quick_xml::Reader;
 use regex::Regex;
-use std::borrow::Cow;
-use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{read_to_string, File};
+use std::fmt::Debug;
+use std::fs::File;
 use std::io::BufReader;
-use phf::phf_map;
-
-pub static ENTITY_MAP: phf::Map<&'static str, &'static str> = phf_map! {
-    "Agrave" => "\u{00C0}",  // À
-    "Aacute" => "\u{00C1}",  // Á
-    "Acirc" => "\u{00C2}",   // Â
-    "Atilde" => "\u{00C3}",  // Ã
-    "Auml" => "\u{00C4}",    // Ä
-    "Aring" => "\u{00C5}",   // Å
-    "AElig" => "\u{00C6}",   // Æ
-    "Ccedil" => "\u{00C7}",  // Ç
-    "Egrave" => "\u{00C8}",  // È
-    "Eacute" => "\u{00C9}",  // É
-    "Ecirc" => "\u{00CA}",   // Ê
-    "Euml" => "\u{00CB}",    // Ë
-    "Igrave" => "\u{00CC}",  // Ì
-    "Iacute" => "\u{00CD}",  // Í
-    "Icirc" => "\u{00CE}",   // Î
-    "Iuml" => "\u{00CF}",    // Ï
-    "ETH" => "\u{00D0}",     // Ð
-    "Ntilde" => "\u{00D1}",  // Ñ
-    "Ograve" => "\u{00D2}",  // Ò
-    "Oacute" => "\u{00D3}",  // Ó
-    "Ocirc" => "\u{00D4}",   // Ô
-    "Otilde" => "\u{00D5}",  // Õ
-    "Ouml" => "\u{00D6}",    // Ö
-    "Oslash" => "\u{00D8}",  // Ø
-    "Ugrave" => "\u{00D9}",  // Ù
-    "Uacute" => "\u{00DA}",  // Ú
-    "Ucirc" => "\u{00DB}",   // Û
-    "Uuml" => "\u{00DC}",    // Ü
-    "Yacute" => "\u{00DD}",  // Ý
-    "THORN" => "\u{00DE}",   // Þ
-    "szlig" => "\u{00DF}",   // ß
-    "agrave" => "\u{00E0}",  // à
-    "aacute" => "\u{00E1}",  // á
-    "acirc" => "\u{00E2}",   // â
-    "atilde" => "\u{00E3}",  // ã
-    "auml" => "\u{00E4}",    // ä
-    "aring" => "\u{00E5}",   // å
-    "aelig" => "\u{00E6}",   // æ
-    "ccedil" => "\u{00E7}",  // ç
-    "egrave" => "\u{00E8}",  // è
-    "eacute" => "\u{00E9}",  // é
-    "ecirc" => "\u{00EA}",   // ê
-    "euml" => "\u{00EB}",    // ë
-    "igrave" => "\u{00EC}",  // ì
-    "iacute" => "\u{00ED}",  // í
-    "icirc" => "\u{00EE}",   // î
-    "iuml" => "\u{00EF}",    // ï
-    "eth" => "\u{00F0}",     // ð
-    "ntilde" => "\u{00F1}",  // ñ
-    "ograve" => "\u{00F2}",  // ò
-    "oacute" => "\u{00F3}",  // ó
-    "ocirc" => "\u{00F4}",   // ô
-    "otilde" => "\u{00F5}",  // õ
-    "ouml" => "\u{00F6}",    // ö
-    "oslash" => "\u{00F8}",  // ø
-    "ugrave" => "\u{00F9}",  // ù
-    "uacute" => "\u{00FA}",  // ú
-    "ucirc" => "\u{00FB}",   // û
-    "uuml" => "\u{00FC}",    // ü
-    "yacute" => "\u{00FD}",  // ý
-    "thorn" => "\u{00FE}",   // þ
-    "yuml" => "\u{00FF}",    // ÿ
-};
 
 pub struct Parser {
     reader: Reader<BufReader<File>>,
@@ -83,74 +17,143 @@ impl Parser {
         let file = File::open(file).unwrap();
         let mut reader = Reader::from_reader(BufReader::new(file));
         reader.config_mut().trim_text(true);
-        Parser { reader}
+        Parser { reader }
     }
 
     fn is_publication(tag: &[u8]) -> bool {
         matches!(
-        tag,
-        b"article" |
-        b"inproceedings" |
-        b"proceedings" |
-        b"book" |
-        b"incollection" |
-        b"phdthesis" |
-        b"masterthesis" |
-        b"www"
-    )
+            tag,
+            b"article"
+                | b"inproceedings"
+                | b"proceedings"
+                | b"book"
+                | b"incollection"
+                | b"phdthesis"
+                | b"masterthesis"
+                | b"www"
+        )
     }
 
-    fn is_person(tag: &[u8], key: &[u8]) -> bool {
-        matches!(tag,b"www") & key.starts_with(b"homepage/")
+    fn is_person(e: &BytesStart) -> bool {
+        let tag = e.name();
+        if let Some(attr) = e.try_get_attribute("key").unwrap() {
+            let key = attr.value.as_ref();
+            return matches!(tag.as_ref(), b"www") & key.starts_with(b"homepage/")
+        }
+        false
     }
 
     fn read_publication(&mut self, eve: &BytesStart) -> Result<Option<Record>, Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut publication = Publication::new();
-        publication.key = String::from(eve.try_get_attribute("key").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?);
-        publication.mdate = String::from(eve.try_get_attribute("mdate").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?);
+        publication.key = String::from(
+            eve.try_get_attribute("key")
+                .unwrap()
+                .unwrap()
+                .decode_and_unescape_value(self.reader.decoder())?,
+        );
+        publication.mdate = String::from(
+            eve.try_get_attribute("mdate")
+                .unwrap()
+                .unwrap()
+                .decode_and_unescape_value(self.reader.decoder())?,
+        );
+        publication.pubtype = match eve.local_name().as_ref() {
+            b"article" => "article".to_string(),
+            b"inproceedings" => "inproceedings".to_string(),
+            b"proceedings" => "proceedings".to_string(),
+            b"book" => "book".to_string(),
+            b"incollection" => "incollection".to_string(),
+            b"phdthesis" => "phdthesis".to_string(),
+            b"masterthesis" => "masterthesis".to_string(),
+            b"www" => "www".to_string(),
+            _ => "".to_string(),
+        };
         loop {
             match self.reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) =>
-                    match e.name().as_ref() {
-                        //General
-                        b"author" => {
-                            let author = self.read_text()?;
-                            let mut person = Person::new();
-                            person.add_name(author);
-                            publication.authors.push(person);
-                        },
-                        b"title" => {publication.title = self.read_text()?;},
-                        b"year" => {publication.year = self.read_text()?.parse()?;},
-                        b"month" => {publication.month = self.read_text()?;},
-                        b"pages" => {publication.pages = self.read_text()?.parse()?;},
-                        b"url" => {publication.resources.push(("url".to_string(),self.read_text()?))},
-                        b"ee" => {publication.resources.push(("ee".to_string(),self.read_text()?))},
-                        b"note" => {
-                            let attr = e.try_get_attribute("type").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?;
-                            match attr.as_ref() {
-                                "isbn" => {publication.isbn = self.read_text()?.parse()?;},
-                                _ => {publication.resources.push((String::from(attr),self.read_text()?))},
+                Ok(Event::Start(e)) => match e.name().as_ref() {
+                    //General
+                    b"author" => {
+                        let author = self.read_text(e)?;
+                        let mut person = Person::new();
+                        person.add_name(author);
+                        publication.authors.push(person);
+                    }
+                    b"title" => {
+                        publication.title = self.read_text(e)?;
+                    }
+                    b"year" => {
+                        publication.year = self.read_int(e)?;
+                    }
+                    b"month" => {
+                        publication.month = self.read_text(e)?;
+                    }
+                    b"pages" => {
+                        publication.pages = self.read_text(e)?;
+                    }
+                    b"note" => {
+                        let attr = e
+                            .try_get_attribute("type");
+                        if let Some(attr) = attr.unwrap() { 
+                            let value = attr.decode_and_unescape_value(self.reader.decoder())?;
+                            match value.as_ref() {
+                                "isbn" => {
+                                    publication.isbn = self.read_text(e)?;
+                                }
+                                _ => publication
+                                    .resources
+                                    .push((String::from(value), self.read_text(e)?)),
                             }
-                        },
-                        b"number" => {publication.number = self.read_text()?.parse()?;},
-                        b"volume" => {publication.volume = self.read_text()?.parse()?;},
-                        // Article
-                        b"journal" => {publication.journal = self.read_text()?;},
-                        // Proceedings
-                        b"publisher" => {publication.publisher = self.read_text()?;},
-                        b"editor" => {publication.editor.push(self.read_text()?);},
-                        b"booktitle" => {publication.book_title = self.read_text()?;}, // Also in inproceedings and incollection
-                        // Thesis
-                        b"school" => {publication.school = self.read_text()?;},
-                        // Other
-                        b"isbn" => {publication.isbn = self.read_text()?;},
-                        b"cite" => {publication.references.push(("cite".to_string(),self.read_text()?));},
-                        b"crossref" => {publication.references.push(("crossref".to_string(),self.read_text()?));},
-                        b"series" => {publication.resources.push(("series".to_string(),self.read_text()?));},
-                        b"stream" => {publication.resources.push(("stream".to_string(),self.read_text()?));},
-                        _ => { self.reader.read_to_end_into(e.to_end().name(), &mut Vec::new()).unwrap();} // Skip unknown tags
-                    },
+                        }
+                        else {
+                            publication
+                                .resources
+                                .push((String::from("note"), self.read_text(e)?));
+                        }
+                        
+                    }
+                    b"number" => {
+                        publication.number = self.read_text(e)?;
+                    }
+                    b"volume" => {
+                        publication.volume = self.read_text(e)?;
+                    }
+                    // Article
+                    b"journal" => {
+                        publication.journal = self.read_text(e)?;
+                    }
+                    // Proceedings
+                    b"publisher" => {
+                        publication.publisher = self.read_text(e)?;
+                    }
+                    b"editor" => {
+                        publication.editor.push(self.read_text(e)?);
+                    }
+                    b"booktitle" => {
+                        publication.book_title = self.read_text(e)?;
+                    } // Also in inproceedings and incollection
+                    // Thesis
+                    b"school" => {
+                        publication.school = self.read_text(e)?;
+                    }
+                    // Other
+                    b"isbn" => {
+                        publication.isbn = self.read_text(e)?;
+                    }
+                    b"cite" | b"crossref"=> {
+                        publication
+                            .references
+                            .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), self.read_text(e)?));
+                    }
+                    b"url" | b"ee" | b"series" | b"stream"=> publication
+                        .resources
+                        .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), self.read_text(e)?)),
+                    _ => {
+                        self.reader
+                            .read_to_end_into(e.to_end().name(), &mut Vec::new())
+                            .unwrap();
+                    } // Skip unknown tags
+                },
                 Ok(Event::End(e)) if e.name().as_ref() == eve.name().as_ref() => break,
                 Ok(Event::Eof) => return Err("Unexpected EOF".into()),
                 _ => (),
@@ -162,36 +165,49 @@ impl Parser {
     fn read_person(&mut self, eve: &BytesStart) -> Result<Option<Record>, Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut person = Person::new();
-        person.mdate = String::from(eve.try_get_attribute("mdate").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?);
+        person.mdate = String::from(
+            eve.try_get_attribute("mdate")
+                .unwrap()
+                .unwrap()
+                .decode_and_unescape_value(self.reader.decoder())?,
+        );
         loop {
             match self.reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) =>
-                    match e.name().as_ref() {
-                        b"author" => {
-                            let author = self.read_text()?;
-                            if person.name == String::new() {
-                                person.add_name(author);
-                            }
-                            else {
-                                person.alias.push(author);
-                            }
-                        },
-                        b"note" => {
-                            let attr = e.try_get_attribute("type").unwrap().unwrap().decode_and_unescape_value(self.reader.decoder())?;
-                            if attr == "affiliation" {
-                                let state = String::from(e.try_get_attribute("label")
-                                    .unwrap_or(Some(Attribute::from(("label","current"))))
-                                    .unwrap()
-                                    .decode_and_unescape_value(self.reader.decoder())?);
-                                person.affiliations.push((String::from(attr),state));
-                            }
-                        },
-                        b"url" => {
-                            let url = self.read_text()?;
-                            person.urls.push(url);
-                        },
-                        _ => { self.reader.read_to_end_into(e.to_end().name(), &mut Vec::new()).unwrap();} // Skip unknown tags
+                Ok(Event::Start(e)) => match e.name().as_ref() {
+                    b"author" => {
+                        let author = self.read_text(e)?;
+                        if person.name == String::new() {
+                            person.add_name(author);
+                        } else {
+                            person.alias.push(author);
+                        }
                     }
+                    b"note" => {
+                        let attr = e
+                            .try_get_attribute("type")
+                            .unwrap()
+                            .unwrap()
+                            .decode_and_unescape_value(self.reader.decoder())?;
+                        if attr == "affiliation" {
+                            let state = String::from(
+                                e.try_get_attribute("label")
+                                    .unwrap_or(Some(Attribute::from(("label", "current"))))
+                                    .unwrap()
+                                    .decode_and_unescape_value(self.reader.decoder())?,
+                            );
+                            person.affiliations.push((String::from(attr), state));
+                        }
+                    }
+                    b"url" => {
+                        let url = self.read_text(e)?;
+                        person.urls.push(url);
+                    }
+                    _ => {
+                        self.reader
+                            .read_to_end_into(e.to_end().name(), &mut Vec::new())
+                            .unwrap();
+                    } // Skip unknown tags
+                },
                 Ok(Event::End(e)) if e.name().as_ref() == b"www" => break,
                 Ok(Event::Eof) => return Err("Unexpected EOF".into()),
                 _ => (),
@@ -200,23 +216,35 @@ impl Parser {
         Ok(Some(Record::Person(person)))
     }
 
-    fn read_text(&mut self) -> Result<String, Box<dyn Error>> {
+    fn read_text(&mut self, start: BytesStart) -> Result<String, Box<dyn Error>> {
         let mut buf = Vec::new();
-        match self.reader.read_event_into(&mut buf) {
-            Ok(Event::Text(e)) => {
-                let a = e.unescape()?.into_owned();
-                let re = Regex::new(r"&(\w+);").unwrap();
-                let result = re.replace_all(&a, |caps: &regex::Captures| {
-                    let key = &caps[1];
-                    match ENTITY_MAP.get(key) {
-                        Some(&char_str) => Cow::Borrowed(char_str),
-                        None => Cow::Owned(caps[0].to_string()),
-                    }
-                });
-                Ok(result.to_string())
+        let mut text = String::new();
+        loop {
+            match self.reader.read_event_into(&mut buf) {
+                Ok(Event::Text(e)) => {
+                    text += e.unescape()?.into_owned().as_str();
+                }
+                Ok(Event::Start(e)) => match e.name().as_ref() {
+                    b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {},
+                    _ => return Err(format!("Unexpected event start {0}", String::from_utf8_lossy(e.name().as_ref())).into())
+                },
+                Ok(Event::End(e)) if e.name().as_ref() == start.name().as_ref() => break,
+                Ok(Event::End(e)) => match e.name().as_ref() {
+                    b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {},
+                    _ => return Err(format!("Unexpected end event {0}", String::from_utf8_lossy(e.name().as_ref())).into()),
+                },
+                _ => return Err(format!("Unexpected event {0} {1}", self.reader.buffer_position(), self.reader.error_position()).into()),
             }
-            _ => Err("Unexpected tag".into()),
         }
+        Ok(text)
+    }
+    
+    fn read_int(&mut self, start: BytesStart) -> Result<usize, Box<dyn Error>> {
+        let value =  self.read_text(start.clone())?;
+        Ok(value.parse::<usize>().unwrap_or_else(|e1| { 
+            let name = String::from_utf8_lossy(start.name().as_ref()).into_owned();
+            panic!("key: {name} value:{value} {e1}")
+        }))
     }
 }
 
@@ -228,18 +256,15 @@ impl Iterator for Parser {
         let mut rec: Option<Record> = None;
         while rec.is_none() {
             match self.reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e))
-                if matches!(e.name().as_ref(), b"dblp")=> {}, // Skip if the tag is dblp
-                Ok(Event::Start(e))
-                if Parser::is_person(e.name().as_ref(), e.try_get_attribute("key").unwrap().unwrap().value.as_ref()) => {
-                    rec = self.read_person(&e).unwrap();
-                },
-                Ok(Event::Start(e))
-                if Parser::is_publication(e.name().as_ref()) => {
-                    rec = self.read_publication( &e).unwrap();
-                },
+                Ok(Event::Start(e)) if matches!(e.name().as_ref(), b"dblp") => {} // Skip if the tag is dblp
+                Ok(Event::Start(e)) if Parser::is_person(&e) => rec = self.read_person(&e).unwrap(),
+                Ok(Event::Start(e)) if Parser::is_publication(e.name().as_ref()) => rec = self.read_publication(&e).unwrap(),
                 Ok(Event::Eof) => (),
-                Err(e) => panic!("Error at position {}: {:?}", self.reader.buffer_position(), e),
+                Err(e) => panic!(
+                    "Error at position {}: {:?}",
+                    self.reader.buffer_position(),
+                    e
+                ),
                 _ => (),
             }
             buf.clear();
@@ -250,14 +275,17 @@ impl Iterator for Parser {
 
 pub enum Record {
     Publication(Publication),
-    Person(Person)
+    Person(Person),
 }
 
 impl Record {
-    pub fn generate_sql_ops(&self) -> (Vec<String>,Vec<String>) {
+    pub fn generate_sql_ops(
+        &self,
+        param_char: char,
+    ) -> (Vec<(String, Vec<String>)>, Vec<(String, Vec<String>)>) {
         match self {
-            Record::Publication(publication) => publication.to_owned().generate_sql_ops(),
-            Record::Person(person) => (person.to_owned().generate_sql_ops(), Vec::new()),
+            Record::Publication(publication) => publication.to_owned().generate_sql_ops(param_char),
+            Record::Person(person) => (person.to_owned().generate_sql_ops(param_char), Vec::new()),
         }
     }
 }
@@ -270,21 +298,20 @@ pub struct Publication {
     year: usize,
     month: String,
     pages: String,
-    volume: usize,
-    number: usize,
+    volume: String,
+    number: String,
     journal: String,
     publisher: String,
     book_title: String,
     school: String,
     isbn: String,
     editor: Vec<String>,
-    references: Vec<(String,String)>, // cite, crossref
-    resources: Vec<(String, String)>, // ee, url, note (without isbn tagged notes), series, stream
+    references: Vec<(String, String)>, // cite, crossref
+    resources: Vec<(String, String)>,  // ee, url, note (without isbn tagged notes), series, stream
     authors: Vec<Person>,
 }
 
 impl Publication {
-
     fn new() -> Publication {
         Publication {
             pubtype: String::new(),
@@ -294,8 +321,8 @@ impl Publication {
             year: 0,
             month: String::new(),
             pages: String::new(),
-            volume: 0,
-            number: 0,
+            volume: String::new(),
+            number: String::new(),
             journal: String::new(),
             publisher: String::new(),
             book_title: String::new(),
@@ -308,9 +335,12 @@ impl Publication {
         }
     }
 
-    pub fn generate_sql_ops(&self) -> (Vec<String>,Vec<String>) {
+    pub fn generate_sql_ops(
+        &self,
+        param_char: char,
+    ) -> (Vec<(String, Vec<String>)>, Vec<(String, Vec<String>)>) {
         let mut sql_ops = Vec::new();
-        let mut ref_sql_ops = Vec::new(); 
+        let mut ref_sql_ops = Vec::new();
         // Venues
         let mut venue_name = String::new();
         let mut venue_type = String::new();
@@ -318,7 +348,7 @@ impl Publication {
             "article" => {
                 venue_name = self.journal.clone();
                 venue_type = "journal".to_string();
-            },
+            }
             "inproceedings" | "proceedings" => {
                 venue_name = self.book_title.clone();
                 venue_type = "conference".to_string();
@@ -327,138 +357,176 @@ impl Publication {
                 venue_name = self.book_title.clone();
                 venue_type = "book".to_string();
             }
-            _ => ()
+            _ => (),
         };
         // Venue
         if !venue_name.is_empty() && !venue_type.is_empty() {
-            sql_ops.push(
+            sql_ops.push((
                 format!(
-                    "INSERT INTO Venues (name, type) VALUES('{0}', '{1}') ON CONFLICT DO NOTHING;",
-                venue_name, venue_type)
-            );
+                    "INSERT INTO Venues (name, type) VALUES({0}1, {0}2) ON CONFLICT DO NOTHING;",
+                    param_char
+                ),
+                vec![venue_name.clone(), venue_type.clone()],
+            ));
         }
         // Publisher
         if !self.publisher.is_empty() {
-            sql_ops.push(
+            sql_ops.push((
                 format!(
-                    "INSERT INTO Publishers (name) VALUES ('{0}') ON CONFLICT DO NOTHING;", self.publisher
-                )
-            );
+                    "INSERT INTO Publishers (name) VALUES ({0}1) ON CONFLICT DO NOTHING;",
+                    param_char
+                ),
+                vec![self.publisher.clone()],
+            ));
         }
         // Publication
         let mut extra_keys = String::new();
         let mut extra_values = String::new();
+        let mut extra_params = Vec::new();
+        let mut count = 5;
         if self.year != 0 {
             extra_keys.push_str(", year");
-            extra_values.push_str(format!(", {}", self.year).as_str());
+            extra_params.push(self.year.to_string());
+            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
+            count += 1;
         }
         if !self.month.is_empty() {
             extra_keys.push_str(", month");
-            extra_values.push_str(format!(", {}", self.month).as_str());
+            extra_params.push(self.month.clone());
+            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
+            count += 1;
         }
         if !self.school.is_empty() {
             extra_keys.push_str(", school");
-            extra_values.push_str(format!(", {}", self.school).as_str());
+            extra_params.push(self.school.clone());
+            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
+            count += 1;
         }
         if !self.isbn.is_empty() {
             extra_keys.push_str(", isbn");
-            extra_values.push_str(format!(", {}", self.isbn).as_str());
+            extra_params.push(self.isbn.clone());
+            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
+            count += 1;
         }
         if !self.pages.is_empty() {
             extra_keys.push_str(", pages");
-            extra_values.push_str(format!(", {}", self.pages).as_str());
+            extra_params.push(self.pages.clone());
+            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
+            count += 1;
         }
-        if self.volume != 0 {
+        if !self.volume.is_empty() {
             extra_keys.push_str(", volume");
-            extra_values.push_str(format!(", {}", self.volume).as_str());
+            extra_params.push(self.volume.to_string());
+            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
+            count += 1;
         }
-        if self.number != 0 {
+        if !self.number.is_empty() {
             extra_keys.push_str(", number");
-            extra_values.push_str(format!(", {}", self.number).as_str());
+            extra_params.push(self.number.to_string());
+            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
+            count += 1;
         }
         if !venue_name.is_empty() && !venue_type.is_empty() {
             extra_keys.push_str(", venue_id");
             extra_values.push_str(
                 format!(
-                    ", (SELECT id FROM Venues WHERE name='{0}' AND type='{1}')",
-                    venue_name, venue_type
-                ).as_str());
+                    ", (SELECT id FROM Venues WHERE name={0}{1} AND type={0}{2})",
+                    param_char,
+                    count,
+                    count + 1
+                )
+                .as_str(),
+            );
+            extra_params.push(venue_name);
+            extra_params.push(venue_type);
+            count += 2;
         }
         if !self.publisher.is_empty() {
-            extra_keys.push_str(", publisher");
+            extra_keys.push_str(", publisher_id");
             extra_values.push_str(
                 format!(
-                    ", (SELECT id FROM Publishers WHERE name='{0}')",
-                    self.publisher
-                ).as_str()
-            )
+                    ", (SELECT id FROM Publishers WHERE name= {0}{1})",
+                    param_char, count
+                )
+                .as_str(),
+            );
+            extra_params.push(self.publisher.clone());
         }
 
+        let mut params = vec![
+            self.key.clone(),
+            self.mdate.clone(),
+            self.title.clone(),
+            self.pubtype.clone(),
+        ];
+        params.extend(extra_params);
         sql_ops.push(
-            format!(
-                "INSERT INTO Publications (key, mdate, title, type{0}) VALUES ('{1}', '{2}', '{3}', '{4}'{5}) ON CONFLICT DO NOTHING;",
+            (format!(
+                "INSERT INTO Publications (key, mdate, title, type{1}) VALUES ({0}1, {0}2, {0}3, {0}4{2}) ON CONFLICT DO NOTHING;",
+                param_char,
                 extra_keys,
-                self.key,
-                self.mdate,
-                self.title,
-                self.pubtype,
                 extra_values
+            ),
+                params
             )
         );
         // Authors
         for author in &self.authors {
-            sql_ops.push(
+            sql_ops.push((
                 format!(
-                    "INSERT INTO Authors (name, id) VALUES ('{0}', '{1}');",
-                    author.name, author.id
-                )
-            );
-            sql_ops.push(
+                    "INSERT INTO Authors (name, id) VALUES ({0}1, {0}2) ON CONFLICT DO NOTHING;",
+                    param_char
+                ),
+                vec![author.name.clone(), author.id.clone()],
+            ));
+            ref_sql_ops.push((
                 format!(
-                    "INSERT INTO PublicationAuthors (publication_key, author_id) VALUES ('{0}', '{1}') ON CONFLICT DO NOTHING;",
-                    self.key,
-                    format!(
-                        "SELECT id FROM WHERE name = '{0}' AND id = '{1}'",
-                        author.name, author.id
-                    )
-                )
-            );
+                    "INSERT INTO PublicationAuthors (publication_key, author_id) VALUES ({0}1,\
+                      (SELECT id FROM Authors WHERE name = {0}2 AND id = {0}3)\
+                      ) ON CONFLICT DO NOTHING;",
+                    param_char
+                ),
+                vec![self.key.clone(), author.name.clone(), author.id.clone()],
+            ));
         }
         // Resources
         for resource in &self.resources {
-            sql_ops.push(
+            sql_ops.push((
                 format!(
-                    "INSERT INTO Resources (type, value, publication_key) VALUES ('{0}', '{1}', '{2}');",
-                    resource.0, resource.1, self.key
+                    "INSERT INTO Resources (type, value, publication_key) VALUES ({0}1, {0}2, {0}3) ON CONFLICT DO NOTHING;", param_char),
+                    vec![resource.0.clone(), resource.1.clone(), self.key.clone()]
                 )
             );
         }
         // Refrences
         for reference in &self.references {
-            ref_sql_ops.push(
+            ref_sql_ops.push((
                 format!(
-                    "INSERT INTO Reference (type, origin_pub, dest_pub) VALUES ('{0}', '{1}', '{2}');",
-                    reference.0, self.key, reference.1
+                    "INSERT INTO Reference (type, origin_pub, dest_pub) VALUES ({0}1, {0}2, {0}3) ON CONFLICT DO NOTHING;", param_char),
+                    vec![reference.0.clone(), self.key.clone(), reference.1.clone()]
                 )
             );
         }
         // Editors
         for editor in &self.editor {
-            sql_ops.push(
+            sql_ops.push((
                 format!(
-                    "INSERT INTO Editors (name) VALUES ('{0}') ON CONFLICT DO NOTHING;",
-                    editor
-                )
-            );
-            sql_ops.push(
+                    "INSERT INTO Editors (name) VALUES ({0}1) ON CONFLICT DO NOTHING;",
+                    param_char
+                ),
+                vec![editor.clone()],
+            ));
+            ref_sql_ops.push((
                 format!(
-                    "INSERT INTO PublicationEditors (publication_key, editor_id) VALUES ('{0}', '{1}') ON CONFLICT DO NOTHING;",
-                    self.key,
-                    format!("(SELECT id FROM Editors WHERE name = '{}')", editor),
-                )
-            );
+                    "INSERT INTO PublicationEditors (publication_key, editor_id) VALUES ({0}1, \
+                    (SELECT id FROM Editors WHERE name = {0}2)\
+                    ) ON CONFLICT DO NOTHING;",
+                    param_char
+                ),
+                vec![self.key.clone(), editor.clone()],
+            ));
         }
-        (sql_ops,ref_sql_ops)
+        (sql_ops, ref_sql_ops)
     }
 }
 
@@ -467,7 +535,7 @@ pub struct Person {
     id: String,
     alias: Vec<String>,
     mdate: String,
-    affiliations: Vec<(String,String)>,
+    affiliations: Vec<(String, String)>,
     urls: Vec<String>,
 }
 
@@ -491,67 +559,74 @@ impl Person {
                 self.name = caps[1].to_string();
                 self.id = caps[2].to_string();
             });
-        }
-        else {
+        } else {
             self.name = name.to_string();
             self.id = "0001".to_string();
         }
     }
 
-    fn generate_sql_ops(&self) -> Vec<String> {
+    fn generate_sql_ops(&self, param_char: char) -> Vec<(String, Vec<String>)> {
         let mut sql_ops = Vec::new();
 
         // Author
-        sql_ops.push(
+        sql_ops.push((
             format!(
-                "INSERT INTO Authors(name, id, mdate) VALUES ('{0}', '{1}','{2}') ON CONFLICT DO UPDATE \
+                "INSERT INTO Authors(name, id, mdate) VALUES ({0}1 , {0}2 ,{0}3) ON CONFLICT DO UPDATE \
                 SET mdate = excluded.mdate;",
-                self.name,
-                self.id,
-                self.mdate
-            )
+                param_char
+            ),
+            vec![self.name.clone(), self.id.clone(), self.mdate.clone()]
+        )
         );
 
         // Affiliations
         if !self.affiliations.is_empty() {
             for affiliation in &self.affiliations {
-                sql_ops.push(
+                sql_ops.push((
                     format!(
                         "INSERT INTO Affiliations( author_id, affiliation, type)\
-                         VALUES ( \
-                         (SELECT key FROM Authors WHERE name='{0}' AND id='{1}'),\
-                         '{2}', '{3}');",
-                        self.name,self.id,affiliation.0,affiliation.1
-                    )
-                )
+                             VALUES ( \
+                             (SELECT key FROM Authors WHERE name= {0}1 AND id= {0}2 ),\
+                             {0}3, {0}4);",
+                        param_char,
+                    ),
+                    vec![
+                        self.name.clone(),
+                        self.id.clone(),
+                        affiliation.0.clone(),
+                        affiliation.1.clone(),
+                    ],
+                ))
             }
         }
 
         // AuthorWebsites
         if !self.urls.is_empty() {
             for url in &self.urls {
-                sql_ops.push(
+                sql_ops.push((
                     format!(
                         "INSERT INTO AuthorWebsites (author_id, url) VALUES ( \
-                    (SELECT key FROM Authors WHERE name='{0}' AND id='{1}'),\
-                    '{2}');",
-                        self.name, self.id, url
-                    )
-                )
+                    (SELECT key FROM Authors WHERE name= {0}1 AND id= {0}2),\
+                    {0}3);",
+                        param_char,
+                    ),
+                    vec![self.name.clone(), self.id.clone(), url.clone()],
+                ))
             }
         }
 
         // Alias
         if !self.alias.is_empty() {
             for alias in &self.alias {
-                sql_ops.push(
+                sql_ops.push((
                     format!(
                         "INSERT INTO Alias (author_id, alias) VALUES ( \
-                    (SELECT key FROM Authors WHERE name='{0}' AND id='{1}'),\
-                    '{2}');",
-                        self.name, self.id, alias
-                    )
-                )
+                    (SELECT key FROM Authors WHERE name= {0}1 AND id={0}2),\
+                    {0}3);",
+                        param_char
+                    ),
+                    vec![self.name.clone(), self.id.clone(), alias.clone()],
+                ))
             }
         }
 

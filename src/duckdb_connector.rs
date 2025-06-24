@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::time::Instant;
-use duckdb::{params, Connection};
+use duckdb::{params, params_from_iter, Connection};
 use crate::parser::Parser;
 
 pub struct DuckDBConnection {
@@ -12,12 +12,12 @@ pub struct DuckDBConnection {
 
 impl DuckDBConnection {
     pub fn new(dataset: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
-        let mut conn = DuckDBConnection { connection: Connection::open("./data/db.duckdb").unwrap(), dataset: dataset .to_string() };
+        let mut conn = DuckDBConnection { connection: Connection::open("./src/data/db.duckdb").unwrap(), dataset: dataset .to_string() };
         // TODO Add more datasets
         match dataset.as_str() {
             "dblp" => {
                 conn.create_tables_dblp();
-                conn.insert_dblp_data("data/dblp.xml".to_string());
+                conn.insert_dblp_data("./src/data/dblp.xml".to_string());
             },
             _ => { return Err("dataset could not be resolved for duckdb Connection".into())}
         }
@@ -26,20 +26,40 @@ impl DuckDBConnection {
     }
 
     pub fn create_tables_dblp(&mut self) {
-        let mut file = File::open("create_tables_dblp.sql").unwrap();
+        let mut file = File::open("./src/data/create_tables_dblp.sql").unwrap();
         let mut query = String::new();
         file.read_to_string(&mut query).unwrap();
         query = format!("BEGIN;\n {}\n COMMIT;", query);
         self.connection.execute_batch(&query).unwrap();
+        println!("Created Tables DBLP");
     }
 
     pub fn insert_dblp_data(&mut self, file: String) {
         let parser = Parser::new(file.as_ref());
-        for record in parser {
-            let ops = record.generate_sql_ops();
-            for op in ops {
-                self.connection.execute(op.as_ref(),params![]).unwrap();
+        let mut ref_ops = Vec::new();
+        let mut record_count = 0;
+        for record in parser{
+            let ops = record.generate_sql_ops('?');
+            print!("record:{0:0>7}\r", record_count);
+            ref_ops.append(&mut ops.1.clone());
+            for (i, op) in ops.0.iter().enumerate() {
+                let mut stmt = self.connection.prepare_cached(op.0.as_ref()).unwrap();
+                stmt.execute(params_from_iter(op.1.clone()))
+                    .unwrap_or_else(|error| {
+                        !panic!("{0} while executing insert query: {1} {2:?}", error, op.0, op.1);
+                    });
             }
+            record_count += 1;
+            print!("record:{0:0>7}\r", record_count);
+        }
+        print!("\nref_ops:{0:0>5}/{1:0>5}\r", 0, ref_ops.len());
+        for (i, op) in ref_ops.iter().enumerate() {
+            let mut stmt = self.connection.prepare_cached(op.0.as_ref()).unwrap();
+            stmt.execute(params_from_iter(op.1.clone()))
+                .unwrap_or_else(|error| {
+                    !panic!("{0} while executing insert query: {1} {2:?}", error, op.0, op.1);
+                });
+            print!("ref_ops:{0:0>5}/{1:0>5}\r", i + 1, ref_ops.len());
         }
     }
 
@@ -55,7 +75,7 @@ impl DuckDBConnection {
     }
     
     pub fn close(self) -> Result<(), Box<dyn Error>> {
-        self.connection.execute(format!("DROP DATABASE {}", self.dataset).as_str(), params![])?;
+        // TODO Clear Data
         self.connection.close().expect("connection close failed");
         Ok(())
     }
