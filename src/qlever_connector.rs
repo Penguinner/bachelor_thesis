@@ -34,6 +34,7 @@ impl QLeverConnection {
     
     fn startup(&mut self) -> Result<(), Box<dyn Error>> {
         Command::new(format!("mkdir src/data/{}", &self.qlever_file));
+        Command::new(format!("cd src/data/{}", &self.qlever_file));
         Command::new(format!("qlever setup-config {}", self.qlever_file)).status().expect("qlever setup-config failed");
         Command::new("qlever get-data").status().expect("qlever get data failed");
         Command::new("qlever index").status().expect("qlever index failed");

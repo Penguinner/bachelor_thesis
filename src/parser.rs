@@ -1,12 +1,11 @@
-use std::array::IntoIter;
 use quick_xml::Reader;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use regex::Regex;
 use std::error::Error;
-use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufReader;
+use crate::dblp_sql::{Affiliation, AffiliationType, Alias, Author, AuthorWebsite, Data, DataItem, Editor, Key, PublicationAuthor, PublicationEditor, PublicationKey, PublicationType, Publisher, Reference, RefrenceType, Resource, Venue, VenueType};
 
 pub struct Parser {
     reader: Reader<BufReader<File>>,
@@ -279,13 +278,10 @@ pub enum Record {
 }
 
 impl Record {
-    pub fn generate_sql_ops(
-        &self,
-        param_char: char,
-    ) -> (Vec<(String, Vec<String>)>, Vec<(String, Vec<String>)>) {
+    pub fn generate_data_items(self) -> Vec<DataItem> {
         match self {
-            Record::Publication(publication) => publication.to_owned().generate_sql_ops(param_char),
-            Record::Person(person) => (person.to_owned().generate_sql_ops(param_char), Vec::new()),
+            Record::Publication(publication) => publication.generate_data_items(),
+            Record::Person(person) => person.generate_data_items(),
         }
     }
 }
@@ -335,198 +331,213 @@ impl Publication {
         }
     }
 
-    pub fn generate_sql_ops(
-        &self,
-        param_char: char,
-    ) -> (Vec<(String, Vec<String>)>, Vec<(String, Vec<String>)>) {
-        let mut sql_ops = Vec::new();
-        let mut ref_sql_ops = Vec::new();
-        // Venues
-        let mut venue_name = String::new();
-        let mut venue_type = String::new();
-        match self.pubtype.as_ref() {
+    pub fn generate_data_items(self) -> Vec<DataItem> {
+        let mut data_items = Vec::new();
+        let mut venue_name= String::new();
+        let venue_type = match self.pubtype.as_ref() {
             "article" => {
                 venue_name = self.journal.clone();
-                venue_type = "journal".to_string();
+                Some(VenueType::Journal)
             }
             "inproceedings" | "proceedings" => {
                 venue_name = self.book_title.clone();
-                venue_type = "conference".to_string();
+                Some(VenueType::Conference)
             }
             "incollection" => {
                 venue_name = self.book_title.clone();
-                venue_type = "book".to_string();
+                Some(VenueType::Book)
             }
-            _ => (),
+            _ => None,
         };
         // Venue
-        if !venue_name.is_empty() && !venue_type.is_empty() {
-            sql_ops.push((
-                format!(
-                    "INSERT INTO Venues (name, type) VALUES({0}1, {0}2) ON CONFLICT DO NOTHING;",
-                    param_char
-                ),
-                vec![venue_name.clone(), venue_type.clone()],
-            ));
+        let mut venue_key = None;
+        if !venue_name.is_empty() && venue_type.is_some() {
+            let mut venue = DataItem::new(
+                Data::Venue(
+                    Venue {
+                        name: venue_name,
+                        venue_type: venue_type.unwrap()
+                    }
+                )
+            );
+            venue_key = Some(venue.value.key());
+            data_items.push(venue);
         }
         // Publisher
+        let mut publisher_key = None;
         if !self.publisher.is_empty() {
-            sql_ops.push((
-                format!(
-                    "INSERT INTO Publishers (name) VALUES ({0}1) ON CONFLICT DO NOTHING;",
-                    param_char
-                ),
-                vec![self.publisher.clone()],
-            ));
+            let mut publisher = DataItem::new(
+                Data::Publisher(Publisher {name: self.publisher})
+            );
+            publisher_key = Some(publisher.value.key());
+            data_items.push(publisher);
         }
         // Publication
-        let mut extra_keys = String::new();
-        let mut extra_values = String::new();
-        let mut extra_params = Vec::new();
-        let mut count = 5;
-        if self.year != 0 {
-            extra_keys.push_str(", year");
-            extra_params.push(self.year.to_string());
-            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
-            count += 1;
-        }
-        if !self.month.is_empty() {
-            extra_keys.push_str(", month");
-            extra_params.push(self.month.clone());
-            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
-            count += 1;
-        }
-        if !self.school.is_empty() {
-            extra_keys.push_str(", school");
-            extra_params.push(self.school.clone());
-            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
-            count += 1;
-        }
-        if !self.isbn.is_empty() {
-            extra_keys.push_str(", isbn");
-            extra_params.push(self.isbn.clone());
-            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
-            count += 1;
-        }
-        if !self.pages.is_empty() {
-            extra_keys.push_str(", pages");
-            extra_params.push(self.pages.clone());
-            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
-            count += 1;
-        }
-        if !self.volume.is_empty() {
-            extra_keys.push_str(", volume");
-            extra_params.push(self.volume.to_string());
-            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
-            count += 1;
-        }
-        if !self.number.is_empty() {
-            extra_keys.push_str(", number");
-            extra_params.push(self.number.to_string());
-            extra_values.push_str(format!(", {0}{1}", param_char, count).as_str());
-            count += 1;
-        }
-        if !venue_name.is_empty() && !venue_type.is_empty() {
-            extra_keys.push_str(", venue_id");
-            extra_values.push_str(
-                format!(
-                    ", (SELECT id FROM Venues WHERE name={0}{1} AND type={0}{2})",
-                    param_char,
-                    count,
-                    count + 1
-                )
-                .as_str(),
-            );
-            extra_params.push(venue_name);
-            extra_params.push(venue_type);
-            count += 2;
-        }
-        if !self.publisher.is_empty() {
-            extra_keys.push_str(", publisher_id");
-            extra_values.push_str(
-                format!(
-                    ", (SELECT id FROM Publishers WHERE name= {0}{1})",
-                    param_char, count
-                )
-                .as_str(),
-            );
-            extra_params.push(self.publisher.clone());
-        }
-
-        let mut params = vec![
-            self.key.clone(),
-            self.mdate.clone(),
-            self.title.clone(),
-            self.pubtype.clone(),
-        ];
-        params.extend(extra_params);
-        sql_ops.push(
-            (format!(
-                "INSERT INTO Publications (key, mdate, title, type{1}) VALUES ({0}1, {0}2, {0}3, {0}4{2}) ON CONFLICT DO NOTHING;",
-                param_char,
-                extra_keys,
-                extra_values
-            ),
-                params
+        let mut publication = DataItem::new(
+            Data::Publication(
+                crate::dblp_sql::Publication {
+                    key: self.key,
+                    mdate: self.mdate,
+                    title: self.title,
+                    pub_type: PublicationType::from_str(self.pubtype.as_str()).unwrap(),
+                    year: match self.year {
+                        0 => None,
+                        _ => Some(self.year as u32),
+                    },
+                    month: match self.month.as_str() {
+                        "" => None,
+                        _ => Some(self.month),
+                    },
+                    school: match self.school.as_str() {
+                        "" => None,
+                        _ => Some(self.school),
+                    },
+                    isbn: match self.isbn.as_str() {
+                        "" => None,
+                        _ => Some(self.isbn),
+                    },
+                    pages: match self.pages.as_str() {
+                        "" => None,
+                        _ => Some(self.pages),
+                    },
+                    volume: match self.volume.as_str() {
+                        "" => None,
+                        _ => Some(self.volume),
+                    },
+                    number: match self.number.as_str() {
+                        "" => None,
+                        _ => Some(self.number),
+                    },
+                    venue: match venue_key.clone() {
+                        None => None,
+                        Some(x) => {
+                            match x {
+                                Key::Venue(key) => Some(key),
+                                _ => panic!("Invalid key"),
+                            }
+                        }
+                    },
+                    publisher: match publisher_key.clone() {
+                        None => None,
+                        Some(x) => {
+                            match x {
+                                Key::Publisher(key) => Some(key),
+                                _ => panic!("Invalid key"),
+                            }
+                        },
+                    }
+                }
             )
         );
+        let publication_key = publication.value.key();
+        if let Some(key) = venue_key {
+            publication.add_depends_on(key.clone());
+        }
+        if let Some(key) = publisher_key {
+            publication.add_depends_on(key.clone());
+        }
+        
+        data_items.push(publication);
         // Authors
         for author in &self.authors {
-            sql_ops.push((
-                format!(
-                    "INSERT INTO Authors (name, id) VALUES ({0}1, {0}2) ON CONFLICT DO NOTHING;",
-                    param_char
-                ),
-                vec![author.name.clone(), author.id.clone()],
-            ));
-            ref_sql_ops.push((
-                format!(
-                    "INSERT INTO PublicationAuthors (publication_key, author_id) VALUES ({0}1,\
-                      (SELECT id FROM Authors WHERE name = {0}2 AND id = {0}3)\
-                      ) ON CONFLICT DO NOTHING;",
-                    param_char
-                ),
-                vec![self.key.clone(), author.name.clone(), author.id.clone()],
-            ));
+            let author_item = DataItem::new(
+              Data::Author(
+                  Author {
+                      name: author.name.to_string(),
+                      id: author.id.to_string(),
+                      mdate: author.id.to_string(),
+                  }
+              )  
+            );
+            let author_key = author_item.value.key();
+            data_items.push(author_item);
+            let mut pub_authors = DataItem::new(
+                Data::PublicationAuthor(
+                    PublicationAuthor {
+                        publication: match publication_key.clone() {
+                            Key::Publication(key) => key,
+                            _ => panic!("Invalid key"),
+                        },
+                        author: match author_key.clone() {
+                                Key::Author(key) => key,
+                                _ => panic!("Invalid key"),
+                        },
+                    }
+                )
+            );
+            pub_authors.add_depends_on(publication_key.clone());
+            pub_authors.add_depends_on(author_key.clone());
+            data_items.push(pub_authors);
         }
         // Resources
         for resource in &self.resources {
-            sql_ops.push((
-                format!(
-                    "INSERT INTO Resources (type, value, publication_key) VALUES ({0}1, {0}2, {0}3) ON CONFLICT DO NOTHING;", param_char),
-                    vec![resource.0.clone(), resource.1.clone(), self.key.clone()]
+            let mut resource_item = DataItem::new(
+                Data::Resource(
+                    Resource {
+                        resource_type: resource.0.to_string(),
+                        value: resource.1.to_string(),
+                        publication: match publication_key.clone() {
+                            Key::Publication(key) => key,
+                            _ => panic!("Invalid key"),
+                        },
+                    }
                 )
             );
+            resource_item.add_depends_on(publication_key.clone());
+            data_items.push(resource_item);
         }
         // Refrences
         for reference in &self.references {
-            ref_sql_ops.push((
-                format!(
-                    "INSERT INTO Reference (type, origin_pub, dest_pub) VALUES ({0}1, {0}2, {0}3) ON CONFLICT DO NOTHING;", param_char),
-                    vec![reference.0.clone(), self.key.clone(), reference.1.clone()]
+            let mut reference_item = DataItem::new(
+                Data::Reference(
+                    Reference {
+                        refrence_type: RefrenceType::from_str(reference.0.as_str()).unwrap(),
+                        origin: match publication_key.clone() {
+                            Key::Publication(key) => key,
+                            _ => panic!("Invalid key"),
+                        },
+                        destination: PublicationKey {
+                            key: reference.1.clone()
+                        },
+                    }
                 )
             );
+            reference_item.add_depends_on(publication_key.clone());
+            reference_item.add_depends_on(Key::Publication(PublicationKey {
+                key: reference.1.clone()
+            }));
+            data_items.push(reference_item);
         }
         // Editors
         for editor in &self.editor {
-            sql_ops.push((
-                format!(
-                    "INSERT INTO Editors (name) VALUES ({0}1) ON CONFLICT DO NOTHING;",
-                    param_char
-                ),
-                vec![editor.clone()],
-            ));
-            ref_sql_ops.push((
-                format!(
-                    "INSERT INTO PublicationEditors (publication_key, editor_id) VALUES ({0}1, \
-                    (SELECT id FROM Editors WHERE name = {0}2)\
-                    ) ON CONFLICT DO NOTHING;",
-                    param_char
-                ),
-                vec![self.key.clone(), editor.clone()],
-            ));
+            let mut editor_item = DataItem::new(
+                Data::Editor(
+                    Editor {
+                        name: editor.clone().to_string(),
+                    }
+                )
+            );
+            let editor_key = editor_item.value.key();
+            data_items.push(editor_item);
+            
+            let mut pub_editors =  DataItem::new(
+                Data::PublicationEditor(
+                    PublicationEditor {
+                        publication: match publication_key.clone() {
+                            Key::Publication(key) => key,
+                            _ => panic!("Invalid key"),
+                        },
+                        editor: match editor_key.clone() {
+                            Key::Editor(key) => key,
+                            _ => panic!("Invalid key"),
+                        },
+                    }
+                )
+            );
+            pub_editors.add_depends_on(publication_key.clone());
+            pub_editors.add_depends_on(editor_key.clone());
         }
-        (sql_ops, ref_sql_ops)
+        data_items
     }
 }
 
@@ -565,71 +576,80 @@ impl Person {
         }
     }
 
-    fn generate_sql_ops(&self, param_char: char) -> Vec<(String, Vec<String>)> {
-        let mut sql_ops = Vec::new();
+    fn generate_data_items(self) -> Vec<DataItem> {
+        let mut data_items = Vec::new();
 
         // Author
-        sql_ops.push((
-            format!(
-                "INSERT INTO Authors(name, id, mdate) VALUES ({0}1 , {0}2 ,{0}3) ON CONFLICT DO UPDATE \
-                SET mdate = excluded.mdate;",
-                param_char
-            ),
-            vec![self.name.clone(), self.id.clone(), self.mdate.clone()]
-        )
+        let author = DataItem::new(
+            Data::Author(
+                Author {
+                    name: self.name.clone().to_string(),
+                    id: self.id.clone().to_string(),
+                    mdate: self.mdate.clone().to_string(),
+                }
+            )
         );
-
+        let author_key =  author.value.key();
+        data_items.push(author);
+        
         // Affiliations
         if !self.affiliations.is_empty() {
             for affiliation in &self.affiliations {
-                sql_ops.push((
-                    format!(
-                        "INSERT INTO Affiliations( author_id, affiliation, type)\
-                             VALUES ( \
-                             (SELECT key FROM Authors WHERE name= {0}1 AND id= {0}2 ),\
-                             {0}3, {0}4);",
-                        param_char,
-                    ),
-                    vec![
-                        self.name.clone(),
-                        self.id.clone(),
-                        affiliation.0.clone(),
-                        affiliation.1.clone(),
-                    ],
-                ))
+                let mut aff =  DataItem::new(
+                    Data::Affiliation(
+                        Affiliation {
+                            author: match author_key.clone() {
+                                Key::Author(key) => key,
+                                _ => panic!("Invalid key"),
+                            },
+                            affiliation: affiliation.0.clone().to_string(),
+                            aff_type: AffiliationType::from_str(affiliation.1.as_str()).unwrap(),
+                        }
+                    )
+                );
+                aff.add_depends_on(author_key.clone());
+                data_items.push(aff);
             }
         }
 
         // AuthorWebsites
         if !self.urls.is_empty() {
             for url in &self.urls {
-                sql_ops.push((
-                    format!(
-                        "INSERT INTO AuthorWebsites (author_id, url) VALUES ( \
-                    (SELECT key FROM Authors WHERE name= {0}1 AND id= {0}2),\
-                    {0}3);",
-                        param_char,
-                    ),
-                    vec![self.name.clone(), self.id.clone(), url.clone()],
-                ))
+                let mut author_website =  DataItem::new(
+                    Data::AuthorWebsite(
+                        AuthorWebsite {
+                            url: url.clone().to_string(),
+                            author: match author_key.clone() {
+                                Key::Author(key) => key,
+                                _ => panic!("Invalid key"),
+                            },
+                        }
+                    )
+                );
+                author_website.add_depends_on(author_key.clone());
+                data_items.push(author_website);
             }
         }
 
         // Alias
         if !self.alias.is_empty() {
             for alias in &self.alias {
-                sql_ops.push((
-                    format!(
-                        "INSERT INTO Alias (author_id, alias) VALUES ( \
-                    (SELECT key FROM Authors WHERE name= {0}1 AND id={0}2),\
-                    {0}3);",
-                        param_char
-                    ),
-                    vec![self.name.clone(), self.id.clone(), alias.clone()],
-                ))
+                let mut alias_auth = DataItem::new(
+                    Data::Alias(
+                        Alias {
+                            author: match author_key.clone() {
+                                Key::Author(key) => key,
+                                _ => panic!("Invalid key"),
+                            },
+                            alias: alias.to_string(),
+                        }
+                    )
+                );
+                alias_auth.add_depends_on(author_key.clone());
+                data_items.push(alias_auth);
             }
         }
 
-        sql_ops
+        data_items
     }
 }

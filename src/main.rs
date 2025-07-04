@@ -1,3 +1,4 @@
+#[cfg(feature="duckdb")]
 use crate::duckdb_connector::DuckDBConnection;
 use crate::postgres_connector::PostgresConnection;
 use crate::qlever_connector::QLeverConnection;
@@ -17,9 +18,11 @@ use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
 
 mod parser;
+#[cfg(feature = "duckdb")]
 mod duckdb_connector;
 mod postgres_connector;
 mod qlever_connector;
+mod dblp_sql;
 
 fn main() {
     // CLI Setup
@@ -88,9 +91,22 @@ fn main() {
     let data_set = matches.get_one::<String>("data_set")
         .expect("data_set is required");
     let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
+    
+    let mut tests: Vec<Database> = Vec::new();
+    if matches.get_flag("qlever") {
+        tests.push(Database::QLever);
+    }
+    if matches.get_flag("postgres") {
+        tests.push(Database::Postgres);
+    }
+    #[cfg(feature="duckdb")]
+    if matches.get_flag("duckdb") {
+        tests.push(Database::DuckDB);
+    }
+    
     // TODO add more datasets
     match data_set.as_ref() {
-            "dblp" => {
+            "dblp" if tests.iter().any(|x| { x.name() == "duckdb" || x.name() == "postgres"}) => {
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
                 
@@ -99,17 +115,6 @@ fn main() {
             _ => (),
         };
     // Run Tests
-    let mut tests: Vec<Database> = Vec::new();
-    if matches.get_flag("qlever") {
-        tests.push(Database::QLever);
-    }
-    if matches.get_flag("postgres") {
-        tests.push(Database::Postgres);
-    }
-    if matches.get_flag("duckdb") {
-        tests.push(Database::DuckDB);
-    }
-    
     for test in tests {
         // Create Connection and insert Data
         let mut conn = test.to_connection(&data_set.to_string())
@@ -134,6 +139,7 @@ fn main() {
 
 enum Database {
     QLever,
+    #[cfg(feature="duckdb")]
     DuckDB,
     Postgres,
 }
@@ -142,6 +148,7 @@ impl Database {
     pub fn name(&self) -> &str {
         match self {
             Database::QLever => "qlever",
+            #[cfg(feature="duckdb")]
             Database::DuckDB => "duckdb",
             Database::Postgres => "postgres",
         }
@@ -150,6 +157,7 @@ impl Database {
     pub fn to_connection(&self, dataset: &String) -> Result<Connection, Box<dyn Error>> {
         match self {
             Database::QLever =>  Ok(Connection::QLever(QLeverConnection::new(dataset)?)),
+            #[cfg(feature="duckdb")]
             Database::DuckDB => Ok(Connection::DuckDB(DuckDBConnection::new(dataset)?)),
             Database::Postgres => Ok(Connection::PostGres(PostgresConnection::new(dataset)?)),
         }
@@ -181,6 +189,7 @@ fn read_test_file(filename: &str) -> Result<Vec<TSVRecord>, Box<dyn Error>> {
 }
 
 pub enum Connection {
+    #[cfg(feature="duckdb")]
     DuckDB(DuckDBConnection),
     PostGres(PostgresConnection),
     QLever(QLeverConnection),
@@ -189,6 +198,7 @@ pub enum Connection {
 impl Connection {
     pub fn run_test_query(&mut self, record: &TSVRecord) -> Result<u128, Box<dyn Error>> {
         match self {
+            #[cfg(feature="duckdb")]
             Connection::DuckDB(connection) => {
                 connection.run_test_query(record.sql_query.as_ref(), record.row, record.columns)
             },
@@ -203,6 +213,7 @@ impl Connection {
 
     pub fn insert_dblp_data(&mut self, file: String) {
         match self {
+            #[cfg(feature="duckdb")]
             Connection::DuckDB(connection) => {
                 connection.insert_dblp_data(file);
             },
@@ -216,8 +227,9 @@ impl Connection {
     pub fn close(self) -> Result<(), Box<dyn Error>> {
         match self {
             Connection::QLever(connection) => {connection.stop().expect("qlever stop failed");},
+            #[cfg(feature="duckdb")]
             Connection::DuckDB(connection) => {connection.close().expect("connection close failed");},
-            Connection::PostGres(connection) => {connection.close().expect("connection close failed");},
+            Connection::PostGres(connection) => { std::mem::drop(connection);},
         }
         Ok(())
     }
