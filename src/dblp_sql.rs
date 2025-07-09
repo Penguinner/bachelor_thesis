@@ -1,12 +1,19 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use postgres_types::{FromSql, ToSql};
 use crate::parser::{Parser, Record};
+#[cfg(feature="duckdb")]
+use duckdb::{
+    ToSql as DuckToSql,
+    types::ToSqlOutput
+};
+
 
 pub struct DataManager {
     visited_keys: HashSet<Key>,
     items: Vec<DataItem>,
     parser: Parser,
     queue:  VecDeque<Vec<DataItem>>,
+    chunk_size: usize,
 }
 
 impl DataManager {
@@ -16,6 +23,7 @@ impl DataManager {
             items: Vec::new(),
             parser,
             queue:  VecDeque::new(),
+            chunk_size: 1000,
         }
     }
     
@@ -51,6 +59,10 @@ impl DataManager {
     fn insert_record(&mut self, record: Record) {
         self.items.append(&mut record.generate_data_items())
     }
+    
+    pub fn set_chunk_size(&mut self, chunk_size: usize) {
+        self.chunk_size = chunk_size;
+    }
 }
 
 impl Iterator for DataManager {
@@ -58,7 +70,7 @@ impl Iterator for DataManager {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.queue.is_empty() {
-            for _ in 0..100 {
+            for _ in 0..self.chunk_size {
                 if let Some(record) = self.parser.next() {
                     self.insert_record(record);
                 } 
@@ -166,6 +178,24 @@ impl PublicationType {
         }
     }
 }
+#[cfg(feature="duckdb")]
+
+impl DuckToSql for PublicationType {
+    fn to_sql(&self) -> duckdb::Result<ToSqlOutput<'_>> {
+        let status_str = match self {
+            PublicationType::Article => "article",
+            PublicationType::InProceedings => "inproceedings",
+            PublicationType::Proceedings => "proceedings",
+            PublicationType::Book => "book",
+            PublicationType::InCollection => "incollection",
+            PublicationType::PHDThesis => "phdthesis",
+            PublicationType::MasterThesis => "masterthesis",
+            PublicationType::WWW => "www",
+        };
+        
+        duckdb::Result::Ok(ToSqlOutput::from(status_str))
+    }
+}
 
 #[derive(Debug, ToSql, FromSql, Eq, Hash, PartialEq, Clone, Copy)]
 #[postgres(name = "venue_type", rename_all = "lowercase")]
@@ -182,6 +212,18 @@ impl VenueType {
             VenueType::Conference => "conference".to_string(),
             VenueType::Book => "book".to_string(),
         }
+    }
+}
+
+#[cfg(feature="duckdb")]
+impl DuckToSql for VenueType {
+    fn to_sql(&self) -> duckdb::Result<ToSqlOutput<'_>> {
+        let status_str = match self {
+            VenueType::Journal => "journal",
+            VenueType::Conference => "conference",
+            VenueType::Book => "book",
+        };
+        duckdb::Result::Ok(ToSqlOutput::from(status_str))
     }
 }
 
@@ -204,6 +246,18 @@ impl RefrenceType {
     }
 }
 
+#[cfg(feature="duckdb")]
+impl DuckToSql for RefrenceType {
+    fn to_sql(&self) -> duckdb::Result<ToSqlOutput<'_>> {
+        let status_str = match self {
+            RefrenceType::CrossReference => "crossref",
+            RefrenceType::Citation => "cite",
+        };
+        
+        duckdb::Result::Ok(ToSqlOutput::from(status_str))
+    }
+}
+
 #[derive(Debug, ToSql, FromSql, Eq, Hash, PartialEq, Clone)]
 #[postgres(name = "aff_type", rename_all = "lowercase")]
 pub enum AffiliationType {
@@ -218,6 +272,18 @@ impl AffiliationType {
             "former" => Some(AffiliationType::Former),
             _ => None,
         }
+    }
+}
+
+#[cfg(feature="duckdb")]
+impl DuckToSql for AffiliationType {
+    fn to_sql(&self) -> duckdb::Result<ToSqlOutput<'_>> {
+        let status_str = match self {
+            AffiliationType::Current => "current",
+            AffiliationType::Former => "former",
+        };
+        
+        duckdb::Result::Ok(ToSqlOutput::from(status_str))
     }
 }
 
