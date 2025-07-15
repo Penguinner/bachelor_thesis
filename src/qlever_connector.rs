@@ -33,19 +33,17 @@ impl QLeverConnection {
     }
     
     fn startup(&mut self) -> Result<(), Box<dyn Error>> {
-        Command::new(format!("mkdir src/data/{}", &self.qlever_file));
-        Command::new(format!("cd src/data/{}", &self.qlever_file));
-        Command::new(format!("qlever setup-config {}", self.qlever_file)).status().expect("qlever setup-config failed");
-        Command::new("qlever get-data").status().expect("qlever get data failed");
-        Command::new("qlever index").status().expect("qlever index failed");
-        Command::new("qlever start").status().expect("qlever start failed");
+        command_assist("mkdir", &[format!("./src/data/{}", &self.qlever_file).as_str()], "/usr/src/bachelor_thesis")?;
+        command_assist_qlever(&["setup-config", format!("{}", &self.qlever_file).as_str()], &self.qlever_file)?;
+        command_assist_qlever(&["get-data"], &self.qlever_file)?;
+        command_assist_qlever(&["index"], &self.qlever_file)?;
+        command_assist_qlever(&["start"], &self.qlever_file)?;
         Ok(())
     }
      
     pub fn stop(self) -> Result<(), Box<dyn Error>> {
-        Command::new("cd ../../..");
-        Command::new("rm -r ./src/data/dblp");
-        Command::new("qlever stop").status().expect("qlever stop failed");
+        command_assist_qlever(&["stop"], &self.qlever_file)?;
+        command_assist("rm", &["-r", format!("./src/data/{}", &self.qlever_file).as_str()], "/usr/src/bachelor_thesis")?;
         Ok(())
     }
     
@@ -93,4 +91,39 @@ struct JsonRuntimeInfo {
 struct JsonQueryExecTree {
     result_cols: usize,
     result_rows: usize,
+}
+
+fn command_assist(command: &str, args: &[&str], current_dir: &str) -> Result<(), Box<dyn Error>> {
+    let command = Command::new(command)
+        .args(args)
+        .current_dir(current_dir)
+        .output()
+        .expect(("Failed executing command ".to_string() + command + " " + args.join(" ").as_str()).as_ref());
+    println!("status: {}", &command.status);
+    println!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
+    println!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
+    if command.status.success() {
+        Ok(())
+    } else {
+        Err(format!("Command failed status code: {}", command.status).into())
+    }
+}
+
+fn command_assist_qlever(args: &[&str], qlever_file: &str) -> Result<(), Box<dyn Error>> {
+    let command = Command::new("qlever")
+        .args(args)
+        .env("PATH", format!("/usr/qlever-venv/bin:{}", env::var("PATH").unwrap()))
+        .env("VIRTUAL_ENV", "/usr/qlever-venv")
+        .current_dir(format!("/usr/src/bachelor_thesis/src/data/{}", &qlever_file).as_str())
+        .output()
+        .expect(("Failed to execute command ".to_string() + args.join(" ").as_str()).as_str());
+
+    println!("status: {}", &command.status);
+    println!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
+    println!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
+    if command.status.success() {
+        Ok(())
+    } else {
+        Err(format!("Command failed status code: {}", command.status).into())
+    }
 }
