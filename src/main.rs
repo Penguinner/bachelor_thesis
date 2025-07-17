@@ -9,7 +9,7 @@ use futures::TryStreamExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::ops::AddAssign;
 use std::process::Command;
@@ -123,12 +123,13 @@ fn main() {
         let results = run_test(queries, iter, &mut conn)
             .expect(format!("Failed while testing for {}", test.name()).as_str());
         // Save Results
+        let _ = create_dir_all("/extern/data");
         if matches.get_flag("raw") {
-            write_results(&results, format!("./data/{}.raw.tsv", test.name()))
+            write_results(&results, format!("/extern/data/{}.raw.tsv", test.name()))
                 .expect(format!("Failed while writing raw results of {} to file", test.name()).as_str());
         }
         if matches.get_flag("aggregate") {
-            write_results_aggregated(&results, format!("./data/{}.aggregate.tsv", test.name()))
+            write_results_aggregated(&results, format!("/extern/data/{}.aggregate.tsv", test.name()))
                 .expect(format!("Failed while writing aggregate results of {} to file", test.name()).as_str());
         }
         // Clean Up
