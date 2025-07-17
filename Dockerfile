@@ -22,6 +22,8 @@ RUN apt-get update && \
     ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
+RUN curl -fsSL https://get.docker.com | sh
+
 # Install qlever
 RUN python3 -m venv /usr/qlever-venv && \
 	/usr/qlever-venv/bin/pip install --no-cache-dir qlever
