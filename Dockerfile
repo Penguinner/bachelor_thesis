@@ -4,7 +4,7 @@ FROM rust:latest AS rust_builder
 WORKDIR /usr/src/bachelor_thesis
 COPY Cargo.toml .
 COPY src ./src
-RUN cargo install --path .
+RUN cargo install --path . --all-features
 
 # Stage 2: Runtime enviornment
 FROM ubuntu:latest
