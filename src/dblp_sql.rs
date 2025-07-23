@@ -14,6 +14,8 @@ pub struct DataManager {
     parser: Parser,
     queue:  VecDeque<Vec<DataItem>>,
     chunk_size: usize,
+    total_items: usize,
+    processed_items: usize,
 }
 
 impl DataManager {
@@ -24,6 +26,8 @@ impl DataManager {
             parser,
             queue:  VecDeque::new(),
             chunk_size: 1000,
+            total_items: 0,
+            processed_items: 0,
         }
     }
     
@@ -63,6 +67,10 @@ impl DataManager {
     pub fn set_chunk_size(&mut self, chunk_size: usize) {
         self.chunk_size = chunk_size;
     }
+    
+    pub fn log(&self) {
+        println!("processed items: {} / total_items: {}", self.processed_items, self.total_items);
+    }
 }
 
 impl Iterator for DataManager {
@@ -73,6 +81,7 @@ impl Iterator for DataManager {
             for _ in 0..self.chunk_size {
                 if let Some(record) = self.parser.next() {
                     self.insert_record(record);
+                    self.total_items += 1;
                 } 
                 else { 
                     break;
@@ -82,6 +91,7 @@ impl Iterator for DataManager {
         }
         
         if let Some(data_item) = self.queue.pop_front() {
+            self.processed_items += data_item.len();
             Some(data_item)
         } 
         else {

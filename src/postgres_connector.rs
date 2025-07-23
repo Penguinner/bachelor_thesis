@@ -130,6 +130,7 @@ impl PostgresConnection {
         let mut query = String::new();
         file.read_to_string(&mut query).unwrap();
         self.client.batch_execute(&query).unwrap();
+        println!("Finished creating tables DBLP");
     }
 
     pub fn insert_dblp_data(&mut self, file: String) {
@@ -518,6 +519,7 @@ impl PostgresConnection {
                 },
                 _ => { eprintln!("Invalid Data")}
             }
+            data_manager.log();
         }
     }
 

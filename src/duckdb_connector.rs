@@ -504,6 +504,7 @@ impl DuckDBConnection {
                 },
                 _ => { eprintln!("Invalid Data")}
             }
+            data_manager.log();
         }
     }
 
