@@ -25,7 +25,7 @@ impl DataManager {
             items: Vec::new(),
             parser,
             queue:  VecDeque::new(),
-            chunk_size: 1000,
+            chunk_size: 50000,
             total_items: 0,
             processed_items: 0,
         }
@@ -83,7 +83,6 @@ impl Iterator for DataManager {
             for _ in 0..self.chunk_size {
                 if let Some(record) = self.parser.next() {
                     self.insert_record(record);
-                    self.total_items += 1;
                 } 
                 else { 
                     break;
