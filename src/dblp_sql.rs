@@ -61,7 +61,9 @@ impl DataManager {
     }
     
     fn insert_record(&mut self, record: Record) {
-        self.items.append(&mut record.generate_data_items())
+        let mut data_items = record.generate_data_items();
+        self.total_items += data_items.len();
+        self.items.append(&mut data_items)
     }
     
     pub fn set_chunk_size(&mut self, chunk_size: usize) {
