@@ -124,6 +124,38 @@ impl PostgresConnection {
 
         Ok(conn)
     }
+    
+    pub fn renew_conn(&mut self) {
+        let host = if cfg!(target_os = "linux") {
+            "172.17.0.1"
+        } else {
+            "host.docker.internal"
+        };
+        let conn_str = format!(
+            "user=postgres password=password host={} dbname=database",
+            host
+        );
+        // Connect to Postgres DB
+        let mut retries = 0;
+        let max_retries = 10;
+        let client: Client;
+        loop {
+            match Client::connect(&conn_str, NoTls) {
+                Ok(cli) => {
+                    client = cli;
+                    break;
+                },
+                Err(_) if  retries < max_retries => {
+                    retries += 1;
+                    sleep(Duration::from_secs(2));
+                },
+                Err(e) => {
+                    panic!("Failed to connect to database: {}", e);
+                }
+            }
+        }
+        self.client = client;
+    }
 
     pub fn create_tables_dblp(&mut self) {
         let mut file = File::open("./src/data/create_tables_dblp.sql").unwrap();
@@ -137,6 +169,9 @@ impl PostgresConnection {
         let mut data_manager = DataManager::new(Parser::new(file.as_ref()));
         
         while let Some(block) = data_manager.next() {
+            if self.client.is_closed() {
+                self.renew_conn();
+            }
             match block[0].value.matcher().as_str() {
                 "venue" => {
                     let data: Vec<&Venue> = block.iter()
