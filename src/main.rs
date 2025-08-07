@@ -22,7 +22,19 @@ mod parser;
 mod duckdb_connector;
 mod postgres_connector;
 mod qlever_connector;
-mod dblp_sql;
+
+const VENUE_FILE: &str = "./src/data/venues.csv";
+const PUBLISHER_FILE: &str = "./src/data/publishers.csv";
+const EDITOR_FILE: &str = "./src/data/editors.csv";
+const AUTHOR_FILE: &str = "./src/data/authors.csv";
+const PUBLICATION_FILE: &str = "./src/data/publications.csv";
+const RESOURCES_FILE: &str = "./src/data/resources.csv";
+const PUBLICATION_EDITOR_FILE: &str = "./src/data/publication_editors.csv";
+const REFERENCE_FILE: &str = "./src/data/references.csv";
+const PUBLICATION_AUTHORS_FILE: &str = "./src/data/publication_authors.csv";
+const AUTHOR_WEBSITES_FILE: &str = "./src/data/authors_website.csv";
+const AFFILIATIONS_FILE: &str = "./src/data/affiliations.csv";
+const ALIAS_FILE: &str = "./src/data/aliases.csv";
 
 fn main() {
     // CLI Setup
@@ -211,26 +223,13 @@ impl Connection {
             }
         }
     }
-
-    pub fn insert_dblp_data(&mut self, file: String) {
-        match self {
-            #[cfg(feature="duckdb")]
-            Connection::DuckDB(connection) => {
-                connection.insert_dblp_data(file);
-            },
-            Connection::PostGres(connection) => {
-                connection.insert_dblp_data(file);
-            },
-            _ => ()
-        }
-    }
     
     pub fn close(self) -> Result<(), Box<dyn Error>> {
         match self {
             Connection::QLever(connection) => {connection.stop().expect("qlever stop failed");},
             #[cfg(feature="duckdb")]
             Connection::DuckDB(connection) => {connection.close().expect("connection close failed");},
-            Connection::PostGres(connection) => { std::mem::drop(connection);},
+            Connection::PostGres(connection) => { drop(connection);},
         }
         Ok(())
     }

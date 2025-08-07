@@ -1,14 +1,30 @@
+use std::collections::HashMap;
 use quick_xml::Reader;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use regex::Regex;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::BufReader;
-use crate::dblp_sql::{Affiliation, AffiliationType, Alias, Author, AuthorWebsite, Data, DataItem, Editor, Key, PublicationAuthor, PublicationEditor, PublicationKey, PublicationType, Publisher, Reference, RefrenceType, Resource, Venue, VenueType};
+use csv::{Writer, WriterBuilder};
+use serde::{Serialize, Serializer};
+use serde::ser::SerializeStruct;
+use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 
 pub struct Parser {
     reader: Reader<BufReader<File>>,
+    next_venue_id: usize,
+    next_publisher_id: usize,
+    next_editor_id: usize,
+    next_author_id: usize,
+    next_resource_id: usize,
+    next_author_website_id: usize,
+    next_affiliation_id: usize,
+    next_alias_id: usize,
+    venue_map: HashMap<(String, String), usize>,
+    publisher_map: HashMap<String, usize>,
+    editor_map: HashMap<String, usize>,
+    author_map: HashMap<(String, usize), usize>,
 }
 
 impl Parser {
@@ -16,7 +32,67 @@ impl Parser {
         let file = File::open(file).unwrap();
         let mut reader = Reader::from_reader(BufReader::new(file));
         reader.config_mut().trim_text(true);
-        Parser { reader }
+        // Touch all csv files and add header
+        touch_file(VENUE_FILE, &["id", "name", "type"]);
+        touch_file(PUBLISHER_FILE, &["id", "name"]);
+        touch_file(EDITOR_FILE, &["id", "name"]);
+        touch_file(AUTHOR_FILE, &["key", "id", "name", "mdate"]);
+        touch_file(PUBLICATION_FILE, 
+                   &["key",
+                       "mdate",
+                       "title",
+                       "year",
+                       "month",
+                       "type",
+                       "school",
+                       "isbn",
+                       "pages",
+                       "volume",
+                       "number",
+                       "venue_id",
+                       "publisher_id"]);
+        touch_file(RESOURCES_FILE, &["id", "type", "value", "publication_key"]);
+        touch_file(PUBLICATION_EDITOR_FILE, &["publication_key", "editor_id"]);
+        touch_file(REFERENCE_FILE, &["type", "origin_pub", "dest_pub"]);
+        touch_file(PUBLICATION_AUTHORS_FILE, &["publication_key", "author_id"]);
+        touch_file(AUTHOR_WEBSITES_FILE, &["id", "author_id", "url"]);
+        touch_file(AFFILIATIONS_FILE, &["id", "author_id", "affiliation", "type"]);
+        touch_file(ALIAS_FILE, &["id", "author_id", "alias"]);
+        
+        Parser { 
+            reader,
+            next_venue_id: 0,
+            next_publisher_id: 0,
+            next_editor_id: 0,
+            next_author_id: 0,
+            next_resource_id: 0,
+            next_author_website_id: 0,
+            next_affiliation_id: 0,
+            next_alias_id: 0,
+            venue_map: Default::default(),
+            publisher_map: Default::default(),
+            editor_map: Default::default(),
+            author_map: Default::default(),
+        }
+    }
+    
+    pub fn run(&mut self) {
+        let mut buf = Vec::new();
+        loop {
+            match self.reader.read_event_into(&mut buf) {
+                Ok(Event::Start(e)) if matches!(e.name().as_ref(), b"dblp") => {} // Skip if the tag is dblp
+                Ok(Event::Start(e)) if Parser::is_person(&e) => self.read_person(&e).unwrap(),
+                Ok(Event::Start(e)) if Parser::is_publication(e.name().as_ref()) => self.read_publication(&e).unwrap(),
+                Ok(Event::Eof) => return (),
+                Err(e) => panic!(
+                    "Error at position {}: {:?}",
+                    self.reader.buffer_position(),
+                    e
+                ),
+                _ => (),
+            }
+            buf.clear();
+        }
     }
 
     fn is_publication(tag: &[u8]) -> bool {
@@ -42,7 +118,7 @@ impl Parser {
         false
     }
 
-    fn read_publication(&mut self, eve: &BytesStart) -> Result<Option<Record>, Box<dyn Error>> {
+    fn read_publication(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut publication = Publication::new();
         publication.key = String::from(
@@ -82,13 +158,13 @@ impl Parser {
                         publication.title = self.read_text(e)?;
                     }
                     b"year" => {
-                        publication.year = self.read_int(e)?;
+                        publication.year = Some(self.read_int(e)?);
                     }
                     b"month" => {
-                        publication.month = self.read_text(e)?;
+                        publication.month = Some(self.read_text(e)?);
                     }
                     b"pages" => {
-                        publication.pages = self.read_text(e)?;
+                        publication.pages = Some(self.read_text(e)?);
                     }
                     b"note" => {
                         let attr = e
@@ -97,7 +173,7 @@ impl Parser {
                             let value = attr.decode_and_unescape_value(self.reader.decoder())?;
                             match value.as_ref() {
                                 "isbn" => {
-                                    publication.isbn = self.read_text(e)?;
+                                    publication.isbn = Some(self.read_text(e)?);
                                 }
                                 _ => publication
                                     .resources
@@ -112,32 +188,32 @@ impl Parser {
                         
                     }
                     b"number" => {
-                        publication.number = self.read_text(e)?;
+                        publication.number = Some(self.read_text(e)?);
                     }
                     b"volume" => {
-                        publication.volume = self.read_text(e)?;
+                        publication.volume = Some(self.read_text(e)?);
                     }
                     // Article
                     b"journal" => {
-                        publication.journal = self.read_text(e)?;
+                        publication.journal = Some(self.read_text(e)?);
                     }
                     // Proceedings
                     b"publisher" => {
-                        publication.publisher = self.read_text(e)?;
+                        publication.publisher = Some(self.read_text(e)?);
                     }
                     b"editor" => {
                         publication.editor.push(self.read_text(e)?);
                     }
                     b"booktitle" => {
-                        publication.book_title = self.read_text(e)?;
+                        publication.book_title = Some(self.read_text(e)?);
                     } // Also in inproceedings and incollection
                     // Thesis
                     b"school" => {
-                        publication.school = self.read_text(e)?;
+                        publication.school = Some(self.read_text(e)?);
                     }
                     // Other
                     b"isbn" => {
-                        publication.isbn = self.read_text(e)?;
+                        publication.isbn = Some(self.read_text(e)?);
                     }
                     b"cite" | b"crossref"=> {
                         publication
@@ -158,10 +234,166 @@ impl Parser {
                 _ => (),
             }
         }
-        Ok(Some(Record::Publication(publication)))
+        self.write_publication(publication);
+       Ok(())
+    }
+    
+    fn write_publication(&mut self, publication: Publication) {
+        // Venue
+        let mut venue_name= None;
+        let venue_type = match publication.pubtype.as_ref() {
+            "article" => {
+                venue_name = publication.journal.clone();
+                Some("journal".to_string())
+            }
+            "inproceedings" | "proceedings" => {
+                venue_name = publication.book_title.clone();
+                Some("conference".to_string())
+            }
+            "incollection" => {
+                venue_name = publication.book_title.clone();
+                Some("book".to_string())
+            }
+            _ => None,
+        };
+        if venue_name.is_some()
+            && venue_type.is_some()
+            && !self.venue_map.contains_key(&(venue_name.clone().unwrap(), venue_type.clone().unwrap())) {
+            self.venue_map.insert((venue_name.clone().unwrap(), venue_type.clone().unwrap()), self.next_venue_id);
+            let mut wrt = WriterBuilder::new()
+                .from_writer(OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(VENUE_FILE)
+                    .unwrap());
+            wrt.serialize((self.next_venue_id, venue_name.clone(), venue_type.clone())).unwrap();
+            wrt.flush().unwrap();
+            self.next_venue_id += 1
+        }
+        // Publisher
+        if  publication.publisher.is_some() 
+            && !self.publisher_map.contains_key(&publication.publisher.clone().unwrap()) {
+            self.publisher_map.insert(publication.publisher.clone().unwrap(), self.next_publisher_id);
+            let mut wrt = WriterBuilder::new()
+                .from_writer(
+                    OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .open(PUBLISHER_FILE)
+                        .unwrap());
+            wrt.serialize((self.next_publisher_id, publication.publisher.clone())).unwrap();
+            wrt.flush().unwrap();
+            self.next_publisher_id += 1;
+        }
+        // Editors
+        let mut wrt_editor = WriterBuilder::new()
+            .from_writer(
+                OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(EDITOR_FILE)
+                    .unwrap(),
+            );
+        let mut wrt_pub_editors = WriterBuilder::new()
+            .from_writer(
+                OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(PUBLICATION_EDITOR_FILE)
+                    .unwrap(),
+            );
+        for editor in publication.editor.iter() {
+            if !self.editor_map.contains_key(editor) {
+                self.editor_map.insert(editor.clone(), self.next_editor_id);
+                wrt_editor.serialize((self.next_editor_id, editor)).unwrap();
+                self.next_editor_id += 1;
+            }
+            wrt_pub_editors.serialize((
+                publication.key.clone(),
+                self.editor_map.get(editor).unwrap().clone(),
+            )).unwrap();
+        }
+        wrt_editor.flush().unwrap();
+        drop(wrt_editor);
+        // Publication
+        let mut wrt = WriterBuilder::new()
+            .from_writer(
+                OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(PUBLICATION_FILE)
+                    .unwrap(),
+            );
+        wrt.serialize((
+            publication.key.clone(),
+            publication.mdate.clone(),
+            publication.title.clone(),
+            publication.year.clone(),
+            publication.month.clone(),
+            publication.pubtype.clone(),
+            publication.school.clone(),
+            publication.isbn.clone(),
+            publication.pages.clone(),
+            publication.volume.clone(),
+            publication.number.clone(),
+            self.venue_map.get(&(venue_name.clone().unwrap(), venue_type.clone().unwrap())),
+            self.publisher_map.get(&publication.publisher.clone().unwrap()),
+            )).unwrap();
+        wrt.flush().unwrap();
+        drop(wrt);
+        // Resources
+        let mut res_wrt = WriterBuilder::new()
+            .from_writer(
+                OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(RESOURCES_FILE)
+                    .unwrap()
+            );
+        for resource in publication.resources.iter() {
+            res_wrt.serialize((self.next_resource_id, resource.0.clone(), resource.1.clone(), publication.key.clone())).unwrap();
+            self.next_resource_id += 1;
+        }
+        res_wrt.flush().unwrap();
+        drop(res_wrt);
+        // References
+        let mut ref_wrt = WriterBuilder::new()
+            .from_writer(
+                OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(REFERENCE_FILE)
+                    .unwrap()
+            );
+        for reference in publication.references.iter() {
+            ref_wrt.serialize((reference.0.clone(), publication.key.clone(), reference.1.clone() )).unwrap();
+        }
+        ref_wrt.flush().unwrap();
+        drop(ref_wrt);
+        // Authors
+        let mut pub_auth_wrt =  WriterBuilder::new()
+            .from_writer(
+                OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(PUBLICATION_AUTHORS_FILE)
+                    .unwrap()
+            );
+        for author in  publication.authors.iter() {
+            if !self.author_map.contains_key(&(author.name.clone(), author.id)) {
+                self.author_map.insert((author.name.clone(), author.id), self.next_author_id);
+                self.next_author_id += 1;
+            }
+            pub_auth_wrt.serialize((
+                publication.key.clone(),
+                self.author_map.get(&(author.name.clone(), author.id)).unwrap(),
+            )).unwrap();
+        }
+        pub_auth_wrt.flush().unwrap();
+        drop(pub_auth_wrt);
     }
 
-    fn read_person(&mut self, eve: &BytesStart) -> Result<Option<Record>, Box<dyn Error>> {
+    fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut person = Person::new();
         person.mdate = String::from(
@@ -212,7 +444,84 @@ impl Parser {
                 _ => (),
             }
         }
-        Ok(Some(Record::Person(person)))
+        self.write_person(person);
+        Ok(())
+    }
+    
+    fn write_person(&mut self, person: Person) -> () {
+        if !self.author_map.contains_key(&(person.name.clone(), person.id)) {
+            self.author_map.insert((person.name.clone(), person.id), self.next_author_id);
+            self.next_author_id += 1;
+        }
+        // Author
+        let mut wrt = WriterBuilder::new()
+            .from_writer(OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(AUTHOR_FILE)
+                .unwrap());
+        wrt.serialize((
+            self.author_map.get(&(person.name.clone(), person.id)).unwrap(),
+            person.name.clone(),
+            person.id.clone(),
+            person.mdate.clone(),
+            )).unwrap();
+        wrt.flush().unwrap();
+        drop(wrt);
+        // Websites
+        let mut web_wrt = WriterBuilder::new()
+            .from_writer(OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(AUTHOR_WEBSITES_FILE)
+                .unwrap());
+        for website in person.urls.iter() {
+            web_wrt.serialize((
+                self.next_author_website_id,
+                self.author_map.get(&(person.name.clone(), person.id)).unwrap(),
+                website.clone(),
+                )).unwrap();
+            self.next_author_website_id += 1;
+        }
+        web_wrt.flush().unwrap();
+        drop(web_wrt);
+        // Affiliations
+        let mut aff_wrt = WriterBuilder::new()
+            .from_writer(OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(AFFILIATIONS_FILE)
+                .unwrap());
+        
+        for affiliation in person.affiliations.iter() {
+            aff_wrt.serialize((
+                self.next_affiliation_id,
+                self.author_map.get(&(person.name.clone(), person.id)).unwrap(),
+                affiliation.0.clone(),
+                affiliation.1.clone(),
+                )).unwrap();
+            self.next_affiliation_id += 1;
+        }
+        aff_wrt.flush().unwrap();
+        drop(aff_wrt);
+        // Alias
+        
+        let mut alias_wrt = WriterBuilder::new()
+            .from_writer(OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(ALIAS_FILE)
+                .unwrap());
+        for alias in person.alias.iter() {
+            alias_wrt.serialize((
+                self.next_alias_id,
+                self.author_map.get(&(person.name.clone(), person.id)).unwrap(),
+                alias.clone(),
+                )).unwrap();
+            self.next_alias_id += 1;
+        }
+        alias_wrt.flush().unwrap();
+        drop(alias_wrt);
     }
 
     fn read_text(&mut self, start: BytesStart) -> Result<String, Box<dyn Error>> {
@@ -247,60 +556,21 @@ impl Parser {
     }
 }
 
-impl Iterator for Parser {
-    type Item = Record;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut buf = Vec::new();
-        let mut rec: Option<Record> = None;
-        while rec.is_none() {
-            match self.reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) if matches!(e.name().as_ref(), b"dblp") => {} // Skip if the tag is dblp
-                Ok(Event::Start(e)) if Parser::is_person(&e) => rec = self.read_person(&e).unwrap(),
-                Ok(Event::Start(e)) if Parser::is_publication(e.name().as_ref()) => rec = self.read_publication(&e).unwrap(),
-                Ok(Event::Eof) => (),
-                Err(e) => panic!(
-                    "Error at position {}: {:?}",
-                    self.reader.buffer_position(),
-                    e
-                ),
-                _ => (),
-            }
-            buf.clear();
-        }
-        rec
-    }
-}
-
-pub enum Record {
-    Publication(Publication),
-    Person(Person),
-}
-
-impl Record {
-    pub fn generate_data_items(self) -> Vec<DataItem> {
-        match self {
-            Record::Publication(publication) => publication.generate_data_items(),
-            Record::Person(person) => person.generate_data_items(),
-        }
-    }
-}
-
 pub struct Publication {
     pubtype: String,
     key: String,
     mdate: String,
     title: String,
-    year: usize,
-    month: String,
-    pages: String,
-    volume: String,
-    number: String,
-    journal: String,
-    publisher: String,
-    book_title: String,
-    school: String,
-    isbn: String,
+    year: Option<usize>,
+    month: Option<String>,
+    pages: Option<String>,
+    volume: Option<String>,
+    number: Option<String>,
+    journal: Option<String>,
+    publisher: Option<String>,
+    book_title: Option<String>,
+    school: Option<String>,
+    isbn: Option<String>,
     editor: Vec<String>,
     references: Vec<(String, String)>, // cite, crossref
     resources: Vec<(String, String)>,  // ee, url, note (without isbn tagged notes), series, stream
@@ -314,236 +584,27 @@ impl Publication {
             key: String::new(),
             mdate: String::new(),
             title: String::new(),
-            year: 0,
-            month: String::new(),
-            pages: String::new(),
-            volume: String::new(),
-            number: String::new(),
-            journal: String::new(),
-            publisher: String::new(),
-            book_title: String::new(),
-            school: String::new(),
-            isbn: String::new(),
+            year: None,
+            month: None,
+            pages: None,
+            volume: None,
+            number: None,
+            journal: None,
+            publisher: None,
+            book_title: None,
+            school: None,
+            isbn: None,
             editor: Vec::new(),
             references: Vec::new(),
             resources: Vec::new(),
             authors: Vec::new(),
         }
     }
-
-    pub fn generate_data_items(self) -> Vec<DataItem> {
-        let mut data_items = Vec::new();
-        let mut venue_name= String::new();
-        let venue_type = match self.pubtype.as_ref() {
-            "article" => {
-                venue_name = self.journal.clone();
-                Some(VenueType::Journal)
-            }
-            "inproceedings" | "proceedings" => {
-                venue_name = self.book_title.clone();
-                Some(VenueType::Conference)
-            }
-            "incollection" => {
-                venue_name = self.book_title.clone();
-                Some(VenueType::Book)
-            }
-            _ => None,
-        };
-        // Venue
-        let mut venue_key = None;
-        if !venue_name.is_empty() && venue_type.is_some() {
-            let mut venue = DataItem::new(
-                Data::Venue(
-                    Venue {
-                        name: venue_name,
-                        venue_type: venue_type.unwrap()
-                    }
-                )
-            );
-            venue_key = Some(venue.value.key());
-            data_items.push(venue);
-        }
-        // Publisher
-        let mut publisher_key = None;
-        if !self.publisher.is_empty() {
-            let mut publisher = DataItem::new(
-                Data::Publisher(Publisher {name: self.publisher})
-            );
-            publisher_key = Some(publisher.value.key());
-            data_items.push(publisher);
-        }
-        // Publication
-        let mut publication = DataItem::new(
-            Data::Publication(
-                crate::dblp_sql::Publication {
-                    key: self.key,
-                    mdate: self.mdate,
-                    title: self.title,
-                    pub_type: PublicationType::from_str(self.pubtype.as_str()).unwrap(),
-                    year: match self.year {
-                        0 => None,
-                        _ => Some(self.year as u32),
-                    },
-                    month: match self.month.as_str() {
-                        "" => None,
-                        _ => Some(self.month),
-                    },
-                    school: match self.school.as_str() {
-                        "" => None,
-                        _ => Some(self.school),
-                    },
-                    isbn: match self.isbn.as_str() {
-                        "" => None,
-                        _ => Some(self.isbn),
-                    },
-                    pages: match self.pages.as_str() {
-                        "" => None,
-                        _ => Some(self.pages),
-                    },
-                    volume: match self.volume.as_str() {
-                        "" => None,
-                        _ => Some(self.volume),
-                    },
-                    number: match self.number.as_str() {
-                        "" => None,
-                        _ => Some(self.number),
-                    },
-                    venue: match venue_key.clone() {
-                        None => None,
-                        Some(x) => {
-                            match x {
-                                Key::Venue(key) => Some(key),
-                                _ => panic!("Invalid key"),
-                            }
-                        }
-                    },
-                    publisher: match publisher_key.clone() {
-                        None => None,
-                        Some(x) => {
-                            match x {
-                                Key::Publisher(key) => Some(key),
-                                _ => panic!("Invalid key"),
-                            }
-                        },
-                    }
-                }
-            )
-        );
-        let publication_key = publication.value.key();
-        if let Some(key) = venue_key {
-            publication.add_depends_on(key.clone());
-        }
-        if let Some(key) = publisher_key {
-            publication.add_depends_on(key.clone());
-        }
-        
-        data_items.push(publication);
-        // Authors
-        for author in &self.authors {
-            let author_item = DataItem::new(
-              Data::Author(
-                  Author {
-                      name: author.name.to_string(),
-                      id: author.id.to_string(),
-                      mdate: author.id.to_string(),
-                  }
-              )  
-            );
-            let author_key = author_item.value.key();
-            data_items.push(author_item);
-            let mut pub_authors = DataItem::new(
-                Data::PublicationAuthor(
-                    PublicationAuthor {
-                        publication: match publication_key.clone() {
-                            Key::Publication(key) => key,
-                            _ => panic!("Invalid key"),
-                        },
-                        author: match author_key.clone() {
-                                Key::Author(key) => key,
-                                _ => panic!("Invalid key"),
-                        },
-                    }
-                )
-            );
-            pub_authors.add_depends_on(publication_key.clone());
-            pub_authors.add_depends_on(author_key.clone());
-            data_items.push(pub_authors);
-        }
-        // Resources
-        for resource in &self.resources {
-            let mut resource_item = DataItem::new(
-                Data::Resource(
-                    Resource {
-                        resource_type: resource.0.to_string(),
-                        value: resource.1.to_string(),
-                        publication: match publication_key.clone() {
-                            Key::Publication(key) => key,
-                            _ => panic!("Invalid key"),
-                        },
-                    }
-                )
-            );
-            resource_item.add_depends_on(publication_key.clone());
-            data_items.push(resource_item);
-        }
-        // Refrences
-        for reference in &self.references {
-            let mut reference_item = DataItem::new(
-                Data::Reference(
-                    Reference {
-                        refrence_type: RefrenceType::from_str(reference.0.as_str()).unwrap(),
-                        origin: match publication_key.clone() {
-                            Key::Publication(key) => key,
-                            _ => panic!("Invalid key"),
-                        },
-                        destination: PublicationKey {
-                            key: reference.1.clone()
-                        },
-                    }
-                )
-            );
-            reference_item.add_depends_on(publication_key.clone());
-            reference_item.add_depends_on(Key::Publication(PublicationKey {
-                key: reference.1.clone()
-            }));
-            data_items.push(reference_item);
-        }
-        // Editors
-        for editor in &self.editor {
-            let mut editor_item = DataItem::new(
-                Data::Editor(
-                    Editor {
-                        name: editor.clone().to_string(),
-                    }
-                )
-            );
-            let editor_key = editor_item.value.key();
-            data_items.push(editor_item);
-            
-            let mut pub_editors =  DataItem::new(
-                Data::PublicationEditor(
-                    PublicationEditor {
-                        publication: match publication_key.clone() {
-                            Key::Publication(key) => key,
-                            _ => panic!("Invalid key"),
-                        },
-                        editor: match editor_key.clone() {
-                            Key::Editor(key) => key,
-                            _ => panic!("Invalid key"),
-                        },
-                    }
-                )
-            );
-            pub_editors.add_depends_on(publication_key.clone());
-            pub_editors.add_depends_on(editor_key.clone());
-        }
-        data_items
-    }
 }
 
 pub struct Person {
     name: String,
-    id: String,
+    id: usize,
     alias: Vec<String>,
     mdate: String,
     affiliations: Vec<(String, String)>,
@@ -554,7 +615,7 @@ impl Person {
     fn new() -> Person {
         Person {
             name: String::new(),
-            id: String::new(),
+            id: 1,
             alias: Vec::new(),
             mdate: String::new(),
             affiliations: Vec::new(),
@@ -568,88 +629,20 @@ impl Person {
         if re.is_match(&name) {
             re.captures(name).map(|caps| {
                 self.name = caps[1].to_string();
-                self.id = caps[2].to_string();
+                self.id = caps[2].parse::<usize>().unwrap();
             });
         } else {
             self.name = name.to_string();
-            self.id = "0001".to_string();
         }
     }
+}
 
-    fn generate_data_items(self) -> Vec<DataItem> {
-        let mut data_items = Vec::new();
-
-        // Author
-        let author = DataItem::new(
-            Data::Author(
-                Author {
-                    name: self.name.clone().to_string(),
-                    id: self.id.clone().to_string(),
-                    mdate: self.mdate.clone().to_string(),
-                }
-            )
-        );
-        let author_key =  author.value.key();
-        data_items.push(author);
-        
-        // Affiliations
-        if !self.affiliations.is_empty() {
-            for affiliation in &self.affiliations {
-                let mut aff =  DataItem::new(
-                    Data::Affiliation(
-                        Affiliation {
-                            author: match author_key.clone() {
-                                Key::Author(key) => key,
-                                _ => panic!("Invalid key"),
-                            },
-                            affiliation: affiliation.0.clone().to_string(),
-                            aff_type: AffiliationType::from_str(affiliation.1.as_str()).unwrap(),
-                        }
-                    )
-                );
-                aff.add_depends_on(author_key.clone());
-                data_items.push(aff);
-            }
-        }
-
-        // AuthorWebsites
-        if !self.urls.is_empty() {
-            for url in &self.urls {
-                let mut author_website =  DataItem::new(
-                    Data::AuthorWebsite(
-                        AuthorWebsite {
-                            url: url.clone().to_string(),
-                            author: match author_key.clone() {
-                                Key::Author(key) => key,
-                                _ => panic!("Invalid key"),
-                            },
-                        }
-                    )
-                );
-                author_website.add_depends_on(author_key.clone());
-                data_items.push(author_website);
-            }
-        }
-
-        // Alias
-        if !self.alias.is_empty() {
-            for alias in &self.alias {
-                let mut alias_auth = DataItem::new(
-                    Data::Alias(
-                        Alias {
-                            author: match author_key.clone() {
-                                Key::Author(key) => key,
-                                _ => panic!("Invalid key"),
-                            },
-                            alias: alias.to_string(),
-                        }
-                    )
-                );
-                alias_auth.add_depends_on(author_key.clone());
-                data_items.push(alias_auth);
-            }
-        }
-
-        data_items
-    }
+fn touch_file<I, T>(file: &str, record: I) -> ()
+where 
+    I: IntoIterator<Item=T>,
+    T: AsRef<[u8]>,
+{
+    let mut wrt = Writer::from_path(file).unwrap();
+    wrt.write_record(record).unwrap();
+    wrt.flush().unwrap();
 }

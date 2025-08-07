@@ -1,4 +1,3 @@
-use crate::dblp_sql::{Affiliation, AffiliationType, Alias, Author, AuthorWebsite, Editor, Publication, PublicationAuthor, PublicationEditor, Publisher, Reference, Resource, Venue};
 use std::collections::HashMap;
 use postgres::types::ToSql;
 use crate::parser::Parser;
@@ -13,7 +12,7 @@ use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
 use bollard::query_parameters::CreateContainerOptionsBuilder;
 use futures::TryStreamExt;
 use tokio::runtime::Runtime;
-use crate::dblp_sql::{Data, DataManager};
+use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 
 pub struct PostgresConnection {
     client: Client,
@@ -24,15 +23,6 @@ pub struct PostgresConnection {
 impl PostgresConnection {
 
     pub fn new(dataset: &String) -> Result<Self, Box<dyn Error>> {
-        let host = if cfg!(target_os = "linux") {
-            "172.17.0.1"
-        } else {
-            "host.docker.internal"
-        };
-        let conn_str = format!(
-            "user=postgres password=password host={} dbname=database",
-            host
-        );
         // Startup Docker container
         let rt = Runtime::new()?;
         let handle = rt.handle();
@@ -93,68 +83,18 @@ impl PostgresConnection {
         });
         
         // Connect to Postgres DB
-        let mut retries = 0;
-        let max_retries = 10;
-        let client: Client;
-        loop {
-            match Client::connect(&conn_str, NoTls) {
-                Ok(cli) => {
-                    client = cli;
-                    break;
-                },
-                Err(_) if  retries < max_retries => {
-                    retries += 1;
-                    sleep(Duration::from_secs(2));
-                },
-                Err(e) => {
-                    panic!("Failed to connect to database: {}", e);
-                }
-            }
-        }
-        
+        let client = create_client();
         let mut conn = PostgresConnection { client, dataset: dataset.into(), docker_id: id};
         // TODO add more datasets
         match dataset.as_str() {
             "dblp" => {
                 conn.create_tables_dblp();
-                conn.insert_dblp_data("./src/data/dblp.xml".into());
+                conn.insert_dblp_data();
             },
             _ => { return Err("dataset could not be resolved for postgres Connection".into())}
         }
 
         Ok(conn)
-    }
-    
-    pub fn renew_conn(&mut self) {
-        let host = if cfg!(target_os = "linux") {
-            "172.17.0.1"
-        } else {
-            "host.docker.internal"
-        };
-        let conn_str = format!(
-            "user=postgres password=password host={} dbname=database",
-            host
-        );
-        // Connect to Postgres DB
-        let mut retries = 0;
-        let max_retries = 10;
-        let client: Client;
-        loop {
-            match Client::connect(&conn_str, NoTls) {
-                Ok(cli) => {
-                    client = cli;
-                    break;
-                },
-                Err(_) if  retries < max_retries => {
-                    retries += 1;
-                    sleep(Duration::from_secs(2));
-                },
-                Err(e) => {
-                    panic!("Failed to connect to database: {}", e);
-                }
-            }
-        }
-        self.client = client;
     }
 
     pub fn create_tables_dblp(&mut self) {
@@ -165,448 +105,35 @@ impl PostgresConnection {
         println!("Finished creating tables DBLP");
     }
 
-    pub fn insert_dblp_data(&mut self, file: String) {
-        let mut data_manager = DataManager::new(Parser::new(file.as_ref()));
-        
-        while let Some(block) = data_manager.next() {
-            if self.client.is_closed() {
-                self.renew_conn();
-            }
-            match block[0].value.matcher().as_str() {
-                "venue" => {
-                    let data: Vec<&Venue> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Venue(venue) = &value.value {
-                                Some(venue)
-                            } else { 
-                                None
-                            }
-                        })
-                        .collect();
-                    self.batch_insert(
-                        "Venues",
-                        &["name", "type"],
-                        &data,
-                        |venue| vec![&venue.name, &venue.venue_type],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "publication" => {
-                    let data: Vec<&Publication> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Publication(venue) = &value.value {
-                                Some(venue)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    // Gather venue_ids
-                    let mut venue_names = Vec::new();
-                    let mut venue_types = Vec::new();
-                    let mut publisher_names = Vec::new();
-
-                    for publi in &data {
-                        if let Some(venue_key) = publi.get_venue_key() {
-                            venue_names.push(venue_key.key);
-                            venue_types.push(venue_key.venue_type);
-                        }
-                        if let Some(publisher_key) = publi.get_publisher_key() {
-                            publisher_names.push(publisher_key.key);
-                        }
-                    }
-                    let rows = self.client.query("SELECT id, name, type FROM Venues WHERE name = ANY($1) AND type = ANY($2)", &[&venue_names, &venue_types])
-                        .expect("Failed to execute query");
-                    let mut venue_ids = HashMap::new();
-                    for row in rows {
-                        let key = (row.get::<&str, &str>("name")).to_string() + row.get::<&str, &str>("type") as &str;
-                        let value: i32 = row.get("id");
-                        venue_ids.insert(key, value);
-                    }
-                    // Gather publisher ids
-                    let rows = self.client.query("SELECT id, name FROM Publishers WHERE name = ANY($1)", &[&publisher_names])
-                        .expect("Failed to execute query");
-                    let mut publisher_ids = HashMap::new();
-                    for row in rows {
-                        publisher_ids.insert(row.get::<&str, String>("name"), row.get::<&str, u32>("id"));
-                    }
-                    // Repackage data
-                    let new_data: Vec<(&&Publication, Option<&i32>, Option<&u32>)> = data.iter().map(
-                        |x| {
-                            let mut venue_id = None;
-                            if let Some(id) = &x.venue.clone() {
-                                venue_id = venue_ids.get(&id.get_string());
-                            }
-                            let mut publisher_id = None;
-                            if let Some(id) = &x.publisher {
-                                publisher_id = publisher_ids.get(&id.key);
-                            }
-                            (x, venue_id, publisher_id)
-                        }
-                    ).collect();
-                    
-                    self.batch_insert(
-                        "Publications",
-                        &["key", "mdate", "title", "year", "month", "type", "school", "isbn", "pages", "volume", "number", "venue_id", "publisher_id"],
-                        &new_data,
-                        |value| vec![
-                            &value.0.key,
-                            &value.0.mdate,
-                            &value.0.title,
-                            &value.0.year,
-                            &value.0.month,
-                            &value.0.pub_type,
-                            &value.0.school,
-                            &value.0.isbn,
-                            &value.0.pages,
-                            &value.0.volume,
-                            &value.0.number,
-                            &value.1,
-                            &value.2,
-                        ],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "publisher" => {
-                    let data: Vec<&Publisher> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Publisher(publisher) = &value.value {
-                                Some(publisher)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    self.batch_insert(
-                        "Publishers",
-                        &["name"],
-                        &data,
-                        |value| vec![&value.name],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "editor" => {
-                    let data: Vec<&Editor> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Editor(editor) = &value.value {
-                                Some(editor)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    self.batch_insert(
-                        "Editors",
-                        &["name"],
-                        &data,
-                        |value| vec![&value.name],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "author" => {
-                    let data: Vec<&Author> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Author(val) = &value.value {
-                                Some(val)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    self.batch_insert(
-                        "Authors",
-                        &["name", "id", "mdate"],
-                        &data,
-                        |value| vec![&value.name, &value.id, &value.mdate],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "reference"  => {
-                    let data: Vec<&Reference> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Reference(val) = &value.value {
-                                Some(val)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    self.batch_insert(
-                        "References",
-                        &["refrence_type", "origin_pub", "dest_pub"],
-                        &data,
-                        |value| vec![&value.refrence_type, &value.origin.key, &value.destination.key],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "resource" => {
-                    let data: Vec<&Resource> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Resource(val) = &value.value {
-                                Some(val)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    self.batch_insert(
-                        "Resources",
-                        &["resource_type", "value", "publication"],
-                        &data,
-                        |value| vec![&value.resource_type, &value.value, &value.publication.key],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "publicationEditor" => {
-                    let data: Vec<&PublicationEditor> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::PublicationEditor(val) = &value.value {
-                                Some(val)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    // Gather editor_ids
-                    let editor_names: Vec<String> = data.iter().map(
-                        |x| {
-                            x.editor.clone().key
-                        }
-                    ).collect();
-                    let mut editor_ids = HashMap::new();
-                    for row in self.client.query("SELECT id, name FROM Editors WHERE name = ANY($1)", &[&editor_names]).expect("Failed Query") {
-                        editor_ids.insert(row.get::<&str, String>("name"), row.get::<&str, u32>("id"));
-                    }
-                    
-                    let new_data: Vec<(&String, &u32)> = data.iter().map(
-                        |x| {
-                            (&x.publication.key, editor_ids.get(&x.editor.clone().key).unwrap())
-                        }
-                    ).collect();
-                    
-                    self.batch_insert(
-                        "PublicationEditors",
-                        &["publication_key", "editor_id"],
-                        &new_data,
-                        |value| vec![&value.0, &value.1],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "publicationAuthor" => {
-                    let data: Vec<&PublicationAuthor> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::PublicationAuthor(val) = &value.value {
-                                Some(val)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    // Gather author_ids
-                    let author_names: Vec<String> = data.iter().map(
-                        |x| {
-                            x.author.clone().name
-                        }
-                    ).collect();
-                    let author_ids: Vec<String> = data.iter().map(
-                        |x| {
-                            x.author.clone().id
-                        }
-                    ).collect();
-                    let mut author_keys = HashMap::new();
-                    for row in self.client.query("SELECT key, id, name FROM Authors WHERE name = ANY($1) AND id = ANY($2)", &[&author_names, &author_ids]).expect("Failed Query") {
-                        author_keys.insert(row.get::<&str, String>("name") + row.get::<&str, &str>("id"), row.get::<&str, u32>("key"));
-                    }
-
-                    let new_data: Vec<(&String, &u32)> = data.iter().map(
-                        |x| {
-                            (&x.publication.key, author_keys.get(&x.author.to_string()).unwrap())
-                        }
-                    ).collect();
-
-                    self.batch_insert(
-                        "PublicationAuthors",
-                        &["publication_key", "author_id"],
-                        &new_data,
-                        |value| vec![&value.0, &value.1],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "authorWebsite" => {
-                    let data: Vec<&AuthorWebsite> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::AuthorWebsite(val) = &value.value {
-                                Some(val)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    // Gather author_ids
-                    let author_names: Vec<String> = data.iter().map(
-                        |x| {
-                            x.author.clone().name
-                        }
-                    ).collect();
-                    let author_ids: Vec<String> = data.iter().map(
-                        |x| {
-                            x.author.clone().id
-                        }
-                    ).collect();
-                    let mut author_keys = HashMap::new();
-                    for row in self.client.query("SELECT key, id, name FROM Authors WHERE name = ANY($1) AND id = ANY($2)", &[&author_names, &author_ids]).expect("Failed Query") {
-                        author_keys.insert(row.get::<&str, String>("name") + row.get::<&str, &str>("id"), row.get::<&str, u32>("key"));
-                    }
-
-                    let new_data: Vec<(&String, &u32)> = data.iter().map(
-                        |x| {
-                            (&x.url, author_keys.get(&x.author.to_string()).unwrap())
-                        }
-                    ).collect();
-
-                    self.batch_insert(
-                        "AuthorWebsites",
-                        &["url", "author_id"],
-                        &new_data,
-                        |value| vec![&value.0, &value.1],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "affiliation" => {
-                    let data: Vec<&Affiliation> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Affiliation(val) = &value.value {
-                                Some(val)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    // Gather author_ids
-                    let author_names: Vec<String> = data.iter().map(
-                        |x| {
-                            x.author.clone().name
-                        }
-                    ).collect();
-                    let author_ids: Vec<String> = data.iter().map(
-                        |x| {
-                            x.author.clone().id
-                        }
-                    ).collect();
-                    let mut author_keys = HashMap::new();
-                    for row in self.client.query("SELECT key, id, name FROM Authors WHERE name = ANY($1) AND id = ANY($2)", &[&author_names, &author_ids]).expect("Failed Query") {
-                        author_keys.insert(row.get::<&str, String>("name") + row.get::<&str, &str>("id"), row.get::<&str, u32>("key"));
-                    }
-
-                    let new_data: Vec<(&String, &AffiliationType, &u32)> = data.iter().map(
-                        |x| {
-                            (&x.affiliation, &x.aff_type, author_keys.get(&x.author.to_string()).unwrap())
-                        }
-                    ).collect();
-
-                    self.batch_insert(
-                        "AuthorWebsites",
-                        &["affiliation", "type", "author_id"],
-                        &new_data,
-                        |value| vec![&value.0, &value.1, &value.2],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                "alias" => {
-                    let data: Vec<&Alias> = block.iter()
-                        .filter_map(|value| {
-                            if let Data::Alias(val) = &value.value {
-                                Some(val)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    // Gather author_ids
-                    let author_names: Vec<String> = data.iter().map(
-                        |x| {
-                            x.author.clone().name
-                        }
-                    ).collect();
-                    let author_ids: Vec<String> = data.iter().map(
-                        |x| {
-                            x.author.clone().id
-                        }
-                    ).collect();
-                    let mut author_keys = HashMap::new();
-                    for row in self.client.query("SELECT key, id, name FROM Authors WHERE name = ANY($1) AND id = ANY($2)", &[&author_names, &author_ids]).expect("Failed Query") {
-                        author_keys.insert(row.get::<&str, String>("name") + row.get::<&str, &str>("id"), row.get::<&str, u32>("key"));
-                    }
-
-                    let new_data: Vec<(&String, &u32)> = data.iter().map(
-                        |x| {
-                            (&x.alias, author_keys.get(&x.author.to_string()).unwrap())
-                        }
-                    ).collect();
-
-                    self.batch_insert(
-                        "AuthorWebsites",
-                        &["alias", "author_id"],
-                        &new_data,
-                        |value| vec![&value.0, &value.1],
-                        Some("ON CONFLICT DO NOTHING")
-                    );
-                },
-                _ => { eprintln!("Invalid Data")}
-            }
-            data_manager.log();
-        }
-    }
-
-    fn batch_insert<T, F>(
-        &mut self,
-        table: &str,
-        columns: &[&str],
-        items: &[T],
-        extractor: F,
-        on_conflict: Option<&str>,
-    )
-    where
-        F: Fn(&T) -> Vec<&(dyn ToSql + Sync)>,
-    {
-        if items.is_empty() {
-            return
-        }
-
-        let column_list = columns.join(", ");
-        let num_columns = columns.len();
-        let num_items = items.len();
-
-        // Generate placeholders ($1, $2), ($3, $4), ...
-        let placeholders: Vec<String> = (0..num_items)
-            .map(|row_index| {
-                let start = row_index * num_columns + 1;
-                let placeholders: Vec<String> = (0..num_columns)
-                    .map(|col_index| format!("${}", start + col_index))
-                    .collect();
-                format!("({})", placeholders.join(", "))
-            })
-            .collect();
-
-        // Build query with optional conflict clause
-        let mut query = format!(
-            "INSERT INTO {} ({}) VALUES {}",
-            table,
-            column_list,
-            placeholders.join(", ")
+    pub fn insert_dblp_data(&mut self) {
+        let query = format!(
+            "COPY Venues FROM '{0}';\n\
+             COPY Publishers FROM '{1}';\n\
+             COPY Editors FROM '{2}';\n\
+             COPY Authors FROM '{3}';\n\
+             COPY Publications FROM '{4}';\n\
+             COPY Resources FROM '{5}';\n\
+             COPY PublicationEditors FROM '{6}';\n\
+             COPY Reference FROM '{7}';\n\
+             COPY PublicationAuthors FROM '{8}';\n\
+             COPY AuthorWebsites FROM '{9}';\n\
+             COPY Affiliations FROM '{10}';\n\
+             COPY Alias FROM '{11}';\n",
+            VENUE_FILE,
+            PUBLISHER_FILE,
+            EDITOR_FILE,
+            AUTHOR_FILE,
+            PUBLICATION_FILE,
+            RESOURCES_FILE,
+            PUBLICATION_EDITOR_FILE,
+            REFERENCE_FILE,
+            PUBLICATION_AUTHORS_FILE,
+            AUTHOR_WEBSITES_FILE,
+            AFFILIATIONS_FILE,
+            ALIAS_FILE
         );
-
-        if let Some(clause) = on_conflict {
-            query.push_str(" ");
-            query.push_str(clause);
-        }
-
-        // Prepare parameters
-        let params: Vec<&(dyn ToSql + Sync)> = items.iter()
-            .flat_map(|item| extractor(item))
-            .collect();
-
-        let _ = self.client.execute(&query, &params);
+        self.client.batch_execute(&query).unwrap();
+        println!("Inserted DBLP data");
     }
     
     pub fn run_test_query(&mut self, query: &str, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
@@ -643,4 +170,36 @@ impl Drop for PostgresConnection {
     fn drop(&mut self) {
         self.close().unwrap();
     }
+}
+
+pub fn create_client() -> Client{
+    let host = if cfg!(target_os = "linux") {
+        "172.17.0.1"
+    } else {
+        "host.docker.internal"
+    };
+    let conn_str = format!(
+        "user=postgres password=password host={} dbname=database",
+        host
+    );
+    // Connect to Postgres DB
+    let mut retries = 0;
+    let max_retries = 10;
+    let client: Client;
+    loop {
+        match Client::connect(&conn_str, NoTls) {
+            Ok(cli) => {
+                client = cli;
+                break;
+            },
+            Err(_) if  retries < max_retries => {
+                retries += 1;
+                sleep(Duration::from_secs(2));
+            },
+            Err(e) => {
+                panic!("Failed to connect to database: {}", e);
+            }
+        }
+    }
+    client
 }

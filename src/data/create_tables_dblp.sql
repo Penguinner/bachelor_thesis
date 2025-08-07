@@ -3,36 +3,27 @@ CREATE TYPE venue_type AS ENUM ('journal', 'conference', 'book');
 CREATE TYPE ref_type AS ENUM ('crossref', 'cite');
 CREATE TYPE aff_type AS ENUM('current', 'former');
 
-CREATE SEQUENCE venue_ids START 1;
-CREATE SEQUENCE pub_ids START 1;
-CREATE SEQUENCE edit_ids START 1;
-CREATE SEQUENCE auth_ids START 1;
-CREATE SEQUENCE res_ids START 1;
-CREATE SEQUENCE authweb_ids START 1;
-CREATE SEQUENCE aff_ids START 1;
-CREATE SEQUENCE alias_ids START 1;
-
 CREATE TABLE IF NOT EXISTS Venues(
-    id INTEGER DEFAULT nextval('venue_ids') PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     type venue_type NOT NULL,
     UNIQUE (name, type)
 );
 
 CREATE TABLE IF NOT EXISTS Publishers(
-    id INTEGER DEFAULT nextval('pub_ids') PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
     UNIQUE (name)
 );
 
 CREATE TABLE IF NOT EXISTS Editors(
-    id INTEGER DEFAULT nextval('pub_ids') PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
     UNIQUE (name)
 );
 
 CREATE TABLE IF NOT EXISTS Authors(
-    key INTEGER DEFAULT nextval('auth_ids') PRIMARY KEY,
+    key INTEGER PRIMARY KEY,
     name VARCHAR(255) NOT NUll,
     id VARCHAR(4) NOT NULL,
     mdate DATE,
@@ -58,7 +49,7 @@ CREATE TABLE IF NOT EXISTS Publications(
 );
 
 CREATE TABLE IF NOT EXISTS Resources(
-    id INTEGER DEFAULT nextval('res_ids') PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     type VARCHAR(255) NOT NULL,
     value VARCHAR(255) NOT NULL,
     publication_key VARCHAR(255),
@@ -91,23 +82,23 @@ CREATE TABLE PublicationAuthors(
 );
 
 CREATE TABLE IF NOT EXISTS AuthorWebsites(
-    key INTEGER DEFAULT nextval('authweb_ids') PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     author_id INT,
-    FOREIGN KEY(author_id) REFERENCES Authors(key),
-    url VARCHAR(255)
+    url VARCHAR(255),
+    FOREIGN KEY(author_id) REFERENCES Authors(key)
 );
 
 CREATE TABLE IF NOT EXISTS Affiliations(
-    id INTEGER DEFAULT nextval('aff_ids') PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     author_id INT,
-    FOREIGN KEY(author_id) REFERENCES Authors(key),
     affiliation VARCHAR(255),
-    type aff_type
+    type aff_type,
+    FOREIGN KEY(author_id) REFERENCES Authors(key)                                   
 );
 
 CREATE TABLE IF NOT EXISTS Alias(
-    id INTEGER DEFAULT nextval('alias_ids') PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     author_id INT,
-    FOREIGN KEY (author_id) REFERENCES Authors(key),
-    alias VARCHAR(255)
+    alias VARCHAR(255),
+    FOREIGN KEY (author_id) REFERENCES Authors(key)
 );
