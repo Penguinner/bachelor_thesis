@@ -4,7 +4,7 @@ use crate::parser::Parser;
 use postgres::{Client, NoTls, Row};
 use std::error::Error;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read, Write};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use bollard::Docker;
@@ -106,33 +106,37 @@ impl PostgresConnection {
     }
 
     pub fn insert_dblp_data(&mut self) {
-        let query = format!(
-            "COPY Venues FROM '{0}';\n\
-             COPY Publishers FROM '{1}';\n\
-             COPY Editors FROM '{2}';\n\
-             COPY Authors FROM '{3}';\n\
-             COPY Publications FROM '{4}';\n\
-             COPY Resources FROM '{5}';\n\
-             COPY PublicationEditors FROM '{6}';\n\
-             COPY Reference FROM '{7}';\n\
-             COPY PublicationAuthors FROM '{8}';\n\
-             COPY AuthorWebsites FROM '{9}';\n\
-             COPY Affiliations FROM '{10}';\n\
-             COPY Alias FROM '{11}';\n",
-            VENUE_FILE,
-            PUBLISHER_FILE,
-            EDITOR_FILE,
-            AUTHOR_FILE,
-            PUBLICATION_FILE,
-            RESOURCES_FILE,
-            PUBLICATION_EDITOR_FILE,
-            REFERENCE_FILE,
-            PUBLICATION_AUTHORS_FILE,
-            AUTHOR_WEBSITES_FILE,
-            AFFILIATIONS_FILE,
-            ALIAS_FILE
-        );
-        self.client.batch_execute(&query).unwrap();
+        let queries = [
+            ("Venues", VENUE_FILE),
+            ("Publishers", PUBLISHER_FILE),
+            ("Editors", EDITOR_FILE),
+            ("Authors", AUTHOR_FILE),
+            ("Publications", PUBLICATION_FILE),
+            ("Resources", RESOURCES_FILE),
+            ("PublicationEditors", PUBLICATION_EDITOR_FILE),
+            ("Reference", REFERENCE_FILE),
+            ("PublicationAuthors", PUBLICATION_AUTHORS_FILE),
+            ("AuthorWebsites", AUTHOR_WEBSITES_FILE),
+            ("Affiliations", AFFILIATIONS_FILE),
+            ("Alias", ALIAS_FILE)
+        ];
+        let mut transaction = self.client.transaction().unwrap();
+        for (table, file) in queries.iter() {
+            let mut file = File::open(file).unwrap();
+            let mut reader = BufReader::new(file);
+            let mut sink = transaction.copy_in(&format!("COPY {} FROM STDIN WITH (FORMAT csv)",table)).unwrap();
+            
+            let mut buffer = [0u8; 8192];
+            loop {
+                let bytes_read = reader.read(&mut buffer).unwrap();
+                if bytes_read == 0 {
+                    break;
+                }
+                sink.write_all(&buffer[0..bytes_read]).unwrap();
+            }
+            sink.finish().unwrap();
+        }
+        transaction.commit().unwrap();
         println!("Inserted DBLP data");
     }
     

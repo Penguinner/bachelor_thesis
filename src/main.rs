@@ -16,6 +16,7 @@ use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
+use crate::parser::Parser;
 
 mod parser;
 #[cfg(feature = "duckdb")]
@@ -123,6 +124,8 @@ fn main() {
                 let handle = rt.handle();
                 
                 let _ = handle.block_on(download_dblp_data("./src/data/dblp.xml".into()));
+                let mut parser = Parser::new("./src/data/dblp.xml");
+                parser.run()
             },
             _ => (),
         };
