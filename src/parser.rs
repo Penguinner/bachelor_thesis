@@ -336,8 +336,8 @@ impl Parser {
             publication.pages.clone(),
             publication.volume.clone(),
             publication.number.clone(),
-            self.venue_map.get(&(venue_name.clone().unwrap(), venue_type.clone().unwrap())),
-            self.publisher_map.get(&publication.publisher.clone().unwrap()),
+            self.venue_map.get(&(venue_name.clone().unwrap_or_else(String::new), venue_type.clone().unwrap_or_else(String::new))),
+            self.publisher_map.get(&publication.publisher.clone().unwrap_or_else(String::new)),
             )).unwrap();
         wrt.flush().unwrap();
         drop(wrt);
