@@ -4,7 +4,7 @@ use crate::parser::Parser;
 use postgres::{Client, NoTls, Row};
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use bollard::Docker;
@@ -124,15 +124,16 @@ impl PostgresConnection {
         for (table, file) in queries.iter() {
             let mut file = File::open(file).unwrap();
             let mut reader = BufReader::new(file);
-            let mut sink = transaction.copy_in(&format!("COPY {} FROM STDIN WITH (FORMAT csv)",table)).unwrap();
+            let mut sink = transaction.copy_in(&format!("COPY {} FROM STDIN (DELIMITER '\\t', HEADER)",table)).unwrap();
             
-            let mut buffer = [0u8; 8192];
+            let mut buffer = String::new();
             loop {
-                let bytes_read = reader.read(&mut buffer).unwrap();
+                let bytes_read = reader.read_line(&mut buffer).unwrap();
                 if bytes_read == 0 {
                     break;
                 }
-                sink.write_all(&buffer[0..bytes_read]).unwrap();
+                sink.write_all((&buffer).as_ref()).unwrap();
+                buffer.clear();
             }
             sink.finish().unwrap();
         }

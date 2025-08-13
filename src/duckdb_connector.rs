@@ -40,18 +40,18 @@ impl DuckDBConnection {
     pub fn insert_dblp_data(&mut self) {
         let query = format!(
             "BEGIN;\n\
-             COPY Venues FROM '{0}';\n\
-             COPY Publishers FROM '{1}';\n\
-             COPY Editors FROM '{2}';\n\
-             COPY Authors FROM '{3}';\n\
-             COPY Publications FROM '{4}';\n\
-             COPY Resources FROM '{5}';\n\
-             COPY PublicationEditors FROM '{6}';\n\
-             COPY Reference FROM '{7}';\n\
-             COPY PublicationAuthors FROM '{8}';\n\
-             COPY AuthorWebsites FROM '{9}';\n\
-             COPY Affiliations FROM '{10}';\n\
-             COPY Alias FROM '{11}';\n\
+             COPY Venues FROM '{0}' (DELIMITER '\\t', HEADER);\n\
+             COPY Publishers FROM '{1}' (DELIMITER '\\t', HEADER);\n\
+             COPY Editors FROM '{2}' (DELIMITER '\\t', HEADER);\n\
+             COPY Authors FROM '{3}' (DELIMITER '\\t', HEADER);\n\
+             COPY Publications FROM '{4}' (DELIMITER '\\t', HEADER);\n\
+             COPY Resources FROM '{5}' (DELIMITER '\\t', HEADER);\n\
+             COPY PublicationEditors FROM '{6}' (DELIMITER '\\t', HEADER);\n\
+             COPY Reference FROM '{7}' (DELIMITER '\\t', HEADER);\n\
+             COPY PublicationAuthors FROM '{8}' (DELIMITER '\\t', HEADER);\n\
+             COPY AuthorWebsites FROM '{9}' (DELIMITER '\\t', HEADER);\n\
+             COPY Affiliations FROM '{10}' (DELIMITER '\\t', HEADER);\n\
+             COPY Alias FROM '{11}' (DELIMITER '\\t', HEADER);\n\
              END;",
             VENUE_FILE,
             PUBLISHER_FILE,

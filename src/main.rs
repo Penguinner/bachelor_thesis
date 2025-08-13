@@ -125,7 +125,8 @@ fn main() {
                 
                 let _ = handle.block_on(download_dblp_data("./src/data/dblp.xml".into()));
                 let mut parser = Parser::new("./src/data/dblp.xml");
-                parser.run()
+                parser.run();
+                println!("Finished Parsing DBLP data");
             },
             _ => (),
         };
