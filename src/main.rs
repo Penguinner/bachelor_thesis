@@ -24,18 +24,18 @@ mod duckdb_connector;
 mod postgres_connector;
 mod qlever_connector;
 
-const VENUE_FILE: &str = "./src/data/venues.csv";
-const PUBLISHER_FILE: &str = "./src/data/publishers.csv";
-const EDITOR_FILE: &str = "./src/data/editors.csv";
-const AUTHOR_FILE: &str = "./src/data/authors.csv";
-const PUBLICATION_FILE: &str = "./src/data/publications.csv";
-const RESOURCES_FILE: &str = "./src/data/resources.csv";
-const PUBLICATION_EDITOR_FILE: &str = "./src/data/publication_editors.csv";
-const REFERENCE_FILE: &str = "./src/data/references.csv";
-const PUBLICATION_AUTHORS_FILE: &str = "./src/data/publication_authors.csv";
-const AUTHOR_WEBSITES_FILE: &str = "./src/data/authors_website.csv";
-const AFFILIATIONS_FILE: &str = "./src/data/affiliations.csv";
-const ALIAS_FILE: &str = "./src/data/aliases.csv";
+const VENUE_FILE: &str = "./src/data/venues.tsv";
+const PUBLISHER_FILE: &str = "./src/data/publishers.tsv";
+const EDITOR_FILE: &str = "./src/data/editors.tsv";
+const AUTHOR_FILE: &str = "./src/data/authors.tsv";
+const PUBLICATION_FILE: &str = "./src/data/publications.tsv";
+const RESOURCES_FILE: &str = "./src/data/resources.tsv";
+const PUBLICATION_EDITOR_FILE: &str = "./src/data/publication_editors.tsv";
+const REFERENCE_FILE: &str = "./src/data/references.tsv";
+const PUBLICATION_AUTHORS_FILE: &str = "./src/data/publication_authors.tsv";
+const AUTHOR_WEBSITES_FILE: &str = "./src/data/authors_website.tsv";
+const AFFILIATIONS_FILE: &str = "./src/data/affiliations.tsv";
+const ALIAS_FILE: &str = "./src/data/aliases.tsv";
 
 fn main() {
     // CLI Setup
