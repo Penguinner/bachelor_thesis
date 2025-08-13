@@ -325,7 +325,7 @@ impl Parser {
                         let attr = e
                             .try_get_attribute("type")
                             .unwrap()
-                            .unwrap()
+                            .unwrap_or(Attribute::from(("type", "ERROR")))
                             .decode_and_unescape_value(self.reader.decoder())?;
                         if attr == "affiliation" {
                             let state = String::from(
