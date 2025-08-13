@@ -4,6 +4,8 @@ use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use regex::Regex;
 use std::error::Error;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::BufReader;
 use csv::{Writer, WriterBuilder};
@@ -209,6 +211,9 @@ impl Parser {
                 Ok(Event::Eof) => return Err("Unexpected EOF".into()),
                 _ => (),
             }
+        }
+        if !publication.fulfills_constraints() {
+            println!("{:?}", publication);
         }
         self.write_publication(publication);
        Ok(())
@@ -469,6 +474,35 @@ impl Publication {
             authors: Vec::new(),
         }
     }
+    
+    pub fn fulfills_constraints(&self) -> bool {
+        !self.pubtype.is_empty() && !self.key.is_empty() && !self.mdate.is_empty() && !self.title.is_empty()
+    }
+}
+
+impl fmt::Debug for Publication {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Publication")
+            .field("pubtype", &self.pubtype)
+            .field("key", &self.key)
+            .field("mdate", &self.mdate)
+            .field("title", &self.title)
+            .field("year", &self.year)
+            .field("month", &self.month)
+            .field("pages", &self.pages)
+            .field("volume", &self.volume)
+            .field("number", &self.number)
+            .field("journal", &self.journal)
+            .field("publisher", &self.publisher)
+            .field("book_title", &self.book_title)
+            .field("school", &self.school)
+            .field("isbn", &self.isbn)
+            .field("editor", &self.editor)
+            .field("references", &self.references)
+            .field("resources", &self.resources)
+            .field("authors", &self.authors)
+            .finish()
+    }
 }
 
 pub struct Person {
@@ -506,7 +540,18 @@ impl Person {
     }
 }
 
-
+impl fmt::Debug for Person {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Person")
+            .field("name", &self.name)
+            .field("id", &self.id)
+            .field("alias", &self.alias)
+            .field("mdate", &self.mdate)
+            .field("affiliations", &self.affiliations)
+            .field("urls", &self.urls)
+            .finish()
+    }
+}
 
 struct WriteManager {
     venues: Vec<(usize, Option<String>, Option<String>)>,
