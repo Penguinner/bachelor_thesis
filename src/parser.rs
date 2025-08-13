@@ -91,7 +91,7 @@ impl Parser {
         let tag = e.name();
         if let Some(attr) = e.try_get_attribute("key").unwrap() {
             let key = attr.value.as_ref();
-            return matches!(tag.as_ref(), b"www") & key.starts_with(b"homepage/")
+            return matches!(tag.as_ref(), b"www") && key.starts_with(b"homepage/")
         }
         false
     }
