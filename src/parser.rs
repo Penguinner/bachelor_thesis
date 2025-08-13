@@ -330,8 +330,8 @@ impl Parser {
                         if attr == "affiliation" {
                             let state = String::from(
                                 e.try_get_attribute("label")
-                                    .unwrap_or(Some(Attribute::from(("label", "current"))))
                                     .unwrap()
+                                    .unwrap_or(Attribute::from(("label", "current")))
                                     .decode_and_unescape_value(self.reader.decoder())?,
                             );
                             person.affiliations.push((String::from(attr), state));
