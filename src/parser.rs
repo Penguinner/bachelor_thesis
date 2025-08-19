@@ -364,6 +364,8 @@ fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
         }
         if person.check_valid() {
             self.write_person(person);
+        } else {
+            println!("{:?}", eve);
         }
         Ok(())
     }
