@@ -9,9 +9,9 @@ use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::BufReader;
 use csv::{Writer, WriterBuilder};
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
-use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
+use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PERSON_TEMP, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLICATION_TEMP, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 
 pub struct Parser {
     reader: Reader<BufReader<File>>,
@@ -28,11 +28,15 @@ pub struct Parser {
     editor_map: HashMap<String, usize>,
     author_map: HashMap<(String, usize), usize>,
     writer: WriteManager,
+    publications: Vec<Publication>,
+    persons: Vec<Person>,
 }
 
 impl Parser {
     pub fn new(file: &str) -> Parser {
         let file = File::open(file).unwrap();
+        File::create(PERSON_TEMP).unwrap();
+        File::create(PUBLICATION_TEMP).unwrap();
         let mut reader = Reader::from_reader(BufReader::new(file));
         reader.config_mut().trim_text(true);
         Parser { 
@@ -50,6 +54,8 @@ impl Parser {
             editor_map: Default::default(),
             author_map: Default::default(),
             writer: WriteManager::new(),
+            publications: vec![],
+            persons: vec![],
         }
     }
     
@@ -60,7 +66,7 @@ impl Parser {
                 Ok(Event::Start(e)) if matches!(e.name().as_ref(), b"dblp") => {} // Skip if the tag is dblp
                 Ok(Event::Start(e)) if Parser::is_person(&e) => self.read_person(&e).unwrap(),
                 Ok(Event::Start(e)) if Parser::is_publication(e.name().as_ref()) => self.read_publication(&e).unwrap(),
-                Ok(Event::Eof) => return self.writer.finalize(),
+                Ok(Event::Eof) => break,
                 Err(e) => panic!(
                     "Error at position {}: {:?}",
                     self.reader.buffer_position(),
@@ -70,7 +76,13 @@ impl Parser {
             }
             buf.clear();
         }
-        
+        for person in self.persons {
+            self.write_person(person);
+        }
+        for publication in self.publications {
+            self.write_publication(publication);
+        }
+        self.writer.finalize()
     }
 
     fn is_publication(tag: &[u8]) -> bool {
@@ -127,22 +139,22 @@ impl Parser {
                 Ok(Event::Start(e)) => match e.name().as_ref() {
                     //General
                     b"author" => {
-                        let author = self.read_text(e)?;
+                        let author = self.read_text(&e)?;
                         let mut person = Person::new();
                         person.add_name(author);
                         publication.authors.push(person);
                     }
                     b"title" => {
-                        publication.title = self.read_text(e)?;
+                        publication.title = self.read_text(&e)?;
                     }
                     b"year" => {
-                        publication.year = Some(self.read_int(e)?);
+                        publication.year = Some(self.read_int(&e)?);
                     }
                     b"month" => {
-                        publication.month = Some(self.read_text(e)?);
+                        publication.month = Some(self.read_text(&e)?);
                     }
                     b"pages" => {
-                        publication.pages = Some(self.read_text(e)?);
+                        publication.pages = Some(self.read_text(&e)?);
                     }
                     b"note" => {
                         let attr = e
@@ -151,56 +163,59 @@ impl Parser {
                             let value = attr.decode_and_unescape_value(self.reader.decoder())?;
                             match value.as_ref() {
                                 "isbn" => {
-                                    publication.isbn = Some(self.read_text(e)?);
+                                    publication.isbn = Some(self.read_text(&e)?);
                                 }
                                 _ => publication
                                     .resources
-                                    .push((String::from(value), self.read_text(e)?)),
+                                    .push((String::from(value), self.read_text(&e)?)),
                             }
                         }
                         else {
                             publication
                                 .resources
-                                .push((String::from("note"), self.read_text(e)?));
+                                .push((String::from("note"), self.read_text(&e)?));
                         }
                         
                     }
                     b"number" => {
-                        publication.number = Some(self.read_text(e)?);
+                        publication.number = Some(self.read_text(&e)?);
                     }
                     b"volume" => {
-                        publication.volume = Some(self.read_text(e)?);
+                        publication.volume = Some(self.read_text(&e)?);
                     }
                     // Article
                     b"journal" => {
-                        publication.journal = Some(self.read_text(e)?);
+                        publication.journal = Some(self.read_text(&e)?);
                     }
                     // Proceedings
                     b"publisher" => {
-                        publication.publisher = Some(self.read_text(e)?);
+                        publication.publisher = Some(self.read_text(&e)?);
                     }
                     b"editor" => {
-                        publication.editor.push(self.read_text(e)?);
+                        publication.editor.push(self.read_text(&e)?);
                     }
                     b"booktitle" => {
-                        publication.book_title = Some(self.read_text(e)?);
+                        publication.book_title = Some(self.read_text(&e)?);
                     } // Also in inproceedings and incollection
                     // Thesis
                     b"school" => {
-                        publication.school = Some(self.read_text(e)?);
+                        publication.school = Some(self.read_text(&e)?);
                     }
                     // Other
                     b"isbn" => {
-                        publication.isbn = Some(self.read_text(e)?);
+                        publication.isbn = Some(self.read_text(&e)?);
                     }
                     b"cite" | b"crossref"=> {
-                        publication
-                            .references
-                            .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), self.read_text(e)?));
+                        let text = self.read_text(&e)?;
+                        if !text.contains("homepages/") { // Filter out homepage refrences
+                            publication
+                                .references
+                                .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), text));
+                        }
                     }
                     b"url" | b"ee" | b"series" | b"stream"=> publication
                         .resources
-                        .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), self.read_text(e)?)),
+                        .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), self.read_text(&e)?)),
                     _ => {
                         self.reader
                             .read_to_end_into(e.to_end().name(), &mut Vec::new())
@@ -214,8 +229,9 @@ impl Parser {
         }
         if !publication.fulfills_constraints() {
             println!("{:?}", publication);
+        } else {
+            self.publications.push(publication);
         }
-        self.write_publication(publication);
        Ok(())
     }
     
@@ -290,10 +306,6 @@ impl Parser {
         }
         // Authors
         for author in  publication.authors.iter() {
-            if !self.author_map.contains_key(&(author.name.clone(), author.id)) {
-                self.author_map.insert((author.name.clone(), author.id), self.next_author_id);
-                self.next_author_id += 1;
-            }
             self.writer.write_publication_author((
                 publication.key.clone(),
                 self.author_map.get(&(author.name.clone(), author.id)).unwrap().clone(),
@@ -314,7 +326,7 @@ impl Parser {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) => match e.name().as_ref() {
                     b"author" => {
-                        let author = self.read_text(e)?;
+                        let author = self.read_text(&e)?;
                         if person.name == String::new() {
                             person.add_name(author);
                         } else {
@@ -338,7 +350,7 @@ impl Parser {
                         }
                     }
                     b"url" => {
-                        let url = self.read_text(e)?;
+                        let url = self.read_text(&e)?;
                         person.urls.push(url);
                     }
                     _ => {
@@ -352,15 +364,12 @@ impl Parser {
                 _ => (),
             }
         }
-        self.write_person(person);
+        self.persons.push(person);
         Ok(())
     }
     
     fn write_person(&mut self, person: Person) -> () {
-        if !self.author_map.contains_key(&(person.name.clone(), person.id)) {
-            self.author_map.insert((person.name.clone(), person.id), self.next_author_id);
-            self.next_author_id += 1;
-        }
+        self.author_map.insert((person.name.clone(), person.id), self.next_author_id);
         // Author
         self.writer.write_author((
             self.author_map.get(&(person.name.clone(), person.id)).unwrap().clone(),
@@ -389,16 +398,18 @@ impl Parser {
         }
         // Alias
         for alias in person.alias.iter() {
+            self.author_map.insert((alias.clone(), 0), self.next_author_id);
             self.writer.write_aliases((
                 self.next_alias_id,
-                self.author_map.get(&(person.name.clone(), person.id)).unwrap().clone(),
+                self.next_author_id,
                 alias.clone(),
                 ));
             self.next_alias_id += 1;
         }
+        self.next_author_id += 1;
     }
 
-    fn read_text(&mut self, start: BytesStart) -> Result<String, Box<dyn Error>> {
+    fn read_text(&mut self, start: &BytesStart) -> Result<String, Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut text = String::new();
         loop {
@@ -421,8 +432,8 @@ impl Parser {
         Ok(text)
     }
     
-    fn read_int(&mut self, start: BytesStart) -> Result<usize, Box<dyn Error>> {
-        let value =  self.read_text(start.clone())?;
+    fn read_int(&mut self, start: &BytesStart) -> Result<usize, Box<dyn Error>> {
+        let value =  self.read_text(start)?;
         Ok(value.parse::<usize>().unwrap_or_else(|e1| { 
             let name = String::from_utf8_lossy(start.name().as_ref()).into_owned();
             panic!("key: {name} value:{value} {e1}")
@@ -430,6 +441,7 @@ impl Parser {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Publication {
     pubtype: String,
     key: String,
@@ -505,6 +517,7 @@ impl fmt::Debug for Publication {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Person {
     name: String,
     id: usize,
