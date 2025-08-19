@@ -1,17 +1,17 @@
-use std::collections::HashMap;
-use quick_xml::Reader;
+use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
+use csv::WriterBuilder;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
+use quick_xml::Reader;
 use regex::Regex;
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Serialize, Serializer};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::fmt::{Display, Formatter};
+use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::io::BufReader;
-use csv::{Writer, WriterBuilder};
-use serde::{Deserialize, Serialize, Serializer};
-use serde::ser::SerializeStruct;
-use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 
 pub struct Parser {
     reader: Reader<BufReader<File>>,
@@ -29,7 +29,6 @@ pub struct Parser {
     author_map: HashMap<(String, usize), usize>,
     writer: WriteManager,
     publications: Vec<Publication>,
-    persons: Vec<Person>,
 }
 
 impl Parser {
@@ -53,7 +52,6 @@ impl Parser {
             author_map: Default::default(),
             writer: WriteManager::new(),
             publications: vec![],
-            persons: vec![],
         }
     }
     
@@ -74,13 +72,9 @@ impl Parser {
             }
             buf.clear();
         }
-        for person in self.persons.iter() {
-            self.write_person(person);
-        }
-        for publication in self.publications.iter() {
-            self.write_publication(publication);
-        }
-        self.writer.finalize()
+        self.writer.finalize();
+        self.write_publications();
+        self.writer.finalize();
     }
 
     fn is_publication(tag: &[u8]) -> bool {
@@ -233,92 +227,94 @@ impl Parser {
        Ok(())
     }
     
-    fn write_publication(&mut self, publication: &Publication) {
-        // Venue
-        let mut venue_name= None;
-        let venue_type = match publication.pubtype.as_ref() {
-            "article" => {
-                venue_name = publication.journal.clone();
-                Some("journal".to_string())
+    fn write_publications(&mut self) {
+        for publication in self.publications.iter_mut() {
+            // Venue
+            let mut venue_name = None;
+            let venue_type = match publication.pubtype.as_ref() {
+                "article" => {
+                    venue_name = publication.journal.clone();
+                    Some("journal".to_string())
+                }
+                "inproceedings" | "proceedings" => {
+                    venue_name = publication.book_title.clone();
+                    Some("conference".to_string())
+                }
+                "incollection" => {
+                    venue_name = publication.book_title.clone();
+                    Some("book".to_string())
+                }
+                _ => None,
+            };
+            if venue_name.is_some()
+                && venue_type.is_some()
+                && !self.venue_map.contains_key(&(venue_name.clone().unwrap(), venue_type.clone().unwrap())) {
+                self.venue_map.insert((venue_name.clone().unwrap(), venue_type.clone().unwrap()), self.next_venue_id);
+                self.writer.write_venue((self.next_venue_id, venue_name.clone(), venue_type.clone()));
+                self.next_venue_id += 1
             }
-            "inproceedings" | "proceedings" => {
-                venue_name = publication.book_title.clone();
-                Some("conference".to_string())
+            // Publisher
+            if publication.publisher.is_some()
+                && !self.publisher_map.contains_key(&publication.publisher.clone().unwrap()) {
+                self.publisher_map.insert(publication.publisher.clone().unwrap(), self.next_publisher_id);
+                self.writer.write_publisher((self.next_publisher_id, publication.publisher.clone()));
+                self.next_publisher_id += 1;
             }
-            "incollection" => {
-                venue_name = publication.book_title.clone();
-                Some("book".to_string())
+            // Editors
+            for editor in publication.editor.iter() {
+                if !self.editor_map.contains_key(editor) {
+                    self.editor_map.insert(editor.clone(), self.next_editor_id);
+                    self.writer.write_editor((self.next_editor_id, editor.clone()));
+                    self.next_editor_id += 1;
+                }
+                self.writer.write_publication_editor((
+                    publication.key.clone(),
+                    self.editor_map.get(editor).unwrap().clone(),
+                ));
             }
-            _ => None,
-        };
-        if venue_name.is_some()
-            && venue_type.is_some()
-            && !self.venue_map.contains_key(&(venue_name.clone().unwrap(), venue_type.clone().unwrap())) {
-            self.venue_map.insert((venue_name.clone().unwrap(), venue_type.clone().unwrap()), self.next_venue_id);
-            self.writer.write_venue((self.next_venue_id, venue_name.clone(), venue_type.clone()));
-            self.next_venue_id += 1
-        }
-        // Publisher
-        if  publication.publisher.is_some() 
-            && !self.publisher_map.contains_key(&publication.publisher.clone().unwrap()) {
-            self.publisher_map.insert(publication.publisher.clone().unwrap(), self.next_publisher_id);
-            self.writer.write_publisher((self.next_publisher_id, publication.publisher.clone()));
-            self.next_publisher_id += 1;
-        }
-        // Editors
-        for editor in publication.editor.iter() {
-            if !self.editor_map.contains_key(editor) {
-                self.editor_map.insert(editor.clone(), self.next_editor_id);
-                self.writer.write_editor((self.next_editor_id, editor.clone()));
-                self.next_editor_id += 1;
-            }
-            self.writer.write_publication_editor((
+            // Publication
+            self.writer.write_publication((
                 publication.key.clone(),
-                self.editor_map.get(editor).unwrap().clone(),
+                publication.mdate.clone(),
+                publication.title.clone(),
+                publication.year.clone(),
+                publication.month.clone(),
+                publication.pubtype.clone(),
+                publication.school.clone(),
+                publication.isbn.clone(),
+                publication.pages.clone(),
+                publication.volume.clone(),
+                publication.number.clone(),
+                self.venue_map.get(&(venue_name.clone().unwrap_or_else(String::new), venue_type.clone().unwrap_or_else(String::new))).copied(),
+                self.publisher_map.get(&publication.publisher.clone().unwrap_or_else(String::new)).copied(),
             ));
-        }
-        // Publication
-        self.writer.write_publication((
-            publication.key.clone(),
-            publication.mdate.clone(),
-            publication.title.clone(),
-            publication.year.clone(),
-            publication.month.clone(),
-            publication.pubtype.clone(),
-            publication.school.clone(),
-            publication.isbn.clone(),
-            publication.pages.clone(),
-            publication.volume.clone(),
-            publication.number.clone(),
-            self.venue_map.get(&(venue_name.clone().unwrap_or_else(String::new), venue_type.clone().unwrap_or_else(String::new))).copied(),
-            self.publisher_map.get(&publication.publisher.clone().unwrap_or_else(String::new)).copied(),
-            ));
-        // Resources
-        for resource in publication.resources.iter() {
-            self.writer.write_resource((self.next_resource_id, resource.0.clone(), resource.1.clone(), publication.key.clone()));
-            self.next_resource_id += 1;
-        }
-        // References
-        for reference in publication.references.iter() {
-            self.writer.write_reference((reference.0.clone(), publication.key.clone(), reference.1.clone() ));
-        }
-        // Authors
-        for author in  publication.authors.iter() {
-            self.writer.write_publication_author((
-                publication.key.clone(),
-                self.author_map.get(&(author.name.clone(), author.id)).unwrap().clone(),
-            ));
+            // Resources
+            for resource in publication.resources.iter() {
+                self.writer.write_resource((self.next_resource_id, resource.0.clone(), resource.1.clone(), publication.key.clone()));
+                self.next_resource_id += 1;
+            }
+            // References
+            for reference in publication.references.iter() {
+                self.writer.write_reference((reference.0.clone(), publication.key.clone(), reference.1.clone()));
+            }
+            // Authors
+            for author in publication.authors.iter() {
+                self.writer.write_publication_author((
+                    publication.key.clone(),
+                    self.author_map.get(&(author.name.clone(), author.id)).unwrap().clone(),
+                ));
         }
     }
+}
 
-    fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
-        let mut buf = Vec::new();
-        let mut person = Person::new();
-        person.mdate = String::from(
-            eve.try_get_attribute("mdate")
-                .unwrap()
-                .unwrap()
-                .decode_and_unescape_value(self.reader.decoder())?,
+fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
+    let mut buf = Vec::new();
+    let mut person = Person::new();
+    person.mdate = String::from(
+        eve.try_get_attribute("mdate")
+            .unwrap()
+            .unwrap()
+            .decode_and_unescape_value(self.reader.decoder())?,
         );
         loop {
             match self.reader.read_event_into(&mut buf) {
@@ -362,11 +358,11 @@ impl Parser {
                 _ => (),
             }
         }
-        self.persons.push(person);
+        self.write_person(person);
         Ok(())
     }
     
-    fn write_person(&mut self, person: &Person) -> () {
+    fn write_person(&mut self, person: Person) -> () {
         self.author_map.insert((person.name.clone(), person.id), self.next_author_id);
         // Author
         self.writer.write_author((
