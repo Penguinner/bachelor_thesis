@@ -474,7 +474,7 @@ impl Publication {
             authors: Vec::new(),
         }
     }
-    
+
     pub fn fulfills_constraints(&self) -> bool {
         !self.pubtype.is_empty() && !self.key.is_empty() && !self.mdate.is_empty() && !self.title.is_empty()
     }
@@ -518,7 +518,7 @@ impl Person {
     fn new() -> Person {
         Person {
             name: String::new(),
-            id: 1,
+            id: 0,
             alias: Vec::new(),
             mdate: String::new(),
             affiliations: Vec::new(),
