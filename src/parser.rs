@@ -299,6 +299,10 @@ impl Parser {
             }
             // Authors
             for author in publication.authors.iter() {
+                if !self.author_map.contains_key(&(author.name.clone(), author.id)) {
+                    self.author_map.insert((author.name.clone(), author.id), self.next_author_id);
+                    self.next_author_id += 1;
+                }
                 self.writer.write_publication_author((
                     publication.key.clone(),
                     self.author_map.get(&(author.name.clone(), author.id)).unwrap().clone(),
