@@ -1,5 +1,5 @@
 use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
-use csv::{QuoteStyle, WriterBuilder};
+use csv::WriterBuilder;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
@@ -639,7 +639,6 @@ impl WriteManager {
         if self.venues.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -657,7 +656,6 @@ impl WriteManager {
         if self.publishers.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -675,7 +673,6 @@ impl WriteManager {
         if self.editors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -693,7 +690,6 @@ impl WriteManager {
         if self.authors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -711,7 +707,6 @@ impl WriteManager {
         if self.publications.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -729,7 +724,6 @@ impl WriteManager {
         if self.resources.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -747,7 +741,6 @@ impl WriteManager {
         if self.publication_editors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -765,7 +758,6 @@ impl WriteManager {
         if self.references.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -783,7 +775,6 @@ impl WriteManager {
         if self.publication_authors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -801,7 +792,6 @@ impl WriteManager {
         if self.author_websites.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -819,7 +809,6 @@ impl WriteManager {
         if self.affiliations.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -837,7 +826,6 @@ impl WriteManager {
         if self.aliases.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -855,7 +843,6 @@ impl WriteManager {
         if self.venues.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -870,7 +857,6 @@ impl WriteManager {
         if self.publishers.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -885,7 +871,6 @@ impl WriteManager {
         if self.editors.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -900,7 +885,6 @@ impl WriteManager {
         if self.affiliations.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -915,7 +899,6 @@ impl WriteManager {
         if self.authors.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -930,7 +913,6 @@ impl WriteManager {
         if self.publications.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -945,7 +927,6 @@ impl WriteManager {
         if self.resources.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -960,7 +941,6 @@ impl WriteManager {
         if self.publication_editors.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -975,7 +955,6 @@ impl WriteManager {
         if self.references.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -990,7 +969,6 @@ impl WriteManager {
         if self.publication_authors.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -1005,7 +983,6 @@ impl WriteManager {
         if self.author_websites.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
@@ -1020,7 +997,6 @@ impl WriteManager {
         if self.aliases.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .quote_style(QuoteStyle::NonNumeric)
                 .from_writer(OpenOptions::new()
                     .write(true)
                     .append(true)
