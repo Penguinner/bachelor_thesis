@@ -74,10 +74,10 @@ impl Parser {
             }
             buf.clear();
         }
-        for person in &mut self.persons {
+        for person in self.persons.iter() {
             self.write_person(person);
         }
-        for publication in &mut self.publications {
+        for publication in self.publications.iter() {
             self.write_publication(publication);
         }
         self.writer.finalize()
@@ -233,7 +233,7 @@ impl Parser {
        Ok(())
     }
     
-    fn write_publication(&mut self, publication: &mut Publication) {
+    fn write_publication(&mut self, publication: &Publication) {
         // Venue
         let mut venue_name= None;
         let venue_type = match publication.pubtype.as_ref() {
@@ -366,7 +366,7 @@ impl Parser {
         Ok(())
     }
     
-    fn write_person(&mut self, person: &mut Person) -> () {
+    fn write_person(&mut self, person: &Person) -> () {
         self.author_map.insert((person.name.clone(), person.id), self.next_author_id);
         // Author
         self.writer.write_author((
