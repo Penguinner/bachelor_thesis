@@ -362,7 +362,9 @@ fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
                 _ => (),
             }
         }
-        self.write_person(person);
+        if person.check_valid() {
+            self.write_person(person);
+        }
         Ok(())
     }
     
@@ -548,6 +550,14 @@ impl Person {
         } else {
             self.name = name.to_string();
         }
+    }
+
+    fn check_valid(&self) -> bool {
+        if self.name.is_empty() {
+            println!("{:?}", self);
+            return false
+        }
+        true
     }
 }
 
