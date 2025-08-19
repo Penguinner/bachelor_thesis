@@ -11,7 +11,7 @@ use std::io::BufReader;
 use csv::{Writer, WriterBuilder};
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
-use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PERSON_TEMP, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLICATION_TEMP, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
+use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 
 pub struct Parser {
     reader: Reader<BufReader<File>>,
@@ -35,8 +35,6 @@ pub struct Parser {
 impl Parser {
     pub fn new(file: &str) -> Parser {
         let file = File::open(file).unwrap();
-        File::create(PERSON_TEMP).unwrap();
-        File::create(PUBLICATION_TEMP).unwrap();
         let mut reader = Reader::from_reader(BufReader::new(file));
         reader.config_mut().trim_text(true);
         Parser { 
@@ -76,10 +74,10 @@ impl Parser {
             }
             buf.clear();
         }
-        for person in self.persons {
+        for person in &self.persons {
             self.write_person(person);
         }
-        for publication in self.publications {
+        for publication in &self.publications {
             self.write_publication(publication);
         }
         self.writer.finalize()
@@ -235,7 +233,7 @@ impl Parser {
        Ok(())
     }
     
-    fn write_publication(&mut self, publication: Publication) {
+    fn write_publication(&mut self, publication: &Publication) {
         // Venue
         let mut venue_name= None;
         let venue_type = match publication.pubtype.as_ref() {
@@ -368,7 +366,7 @@ impl Parser {
         Ok(())
     }
     
-    fn write_person(&mut self, person: Person) -> () {
+    fn write_person(&mut self, person: &Person) -> () {
         self.author_map.insert((person.name.clone(), person.id), self.next_author_id);
         // Author
         self.writer.write_author((
