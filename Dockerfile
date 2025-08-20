@@ -36,4 +36,4 @@ ENV PATH="/usr/qlever-venv/bin:$PATH"
 ENV RUST_BACKTRACE=1
 
 #CMD ["bachelor_thesis", "-h"]
-CMD ["bachelor_thesis", "src/data/dblp.tsv", "dblp", "-q", "-d", "-p", "-r", "-a"]
+CMD ["bachelor_thesis", "src/data/dblp.tsv", "dblp", "-p", "-r", "-a"]

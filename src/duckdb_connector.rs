@@ -1,12 +1,9 @@
-use std::collections::HashMap;
+use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
+use duckdb::{params, Connection};
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::time::Instant;
-use duckdb::{appender_params_from_iter, params, params_from_iter, AppenderParams, Connection, ToSql};
-use duckdb::types::Value::Array;
-use crate::parser::Parser;
-use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 
 pub struct DuckDBConnection {
     connection: Connection,

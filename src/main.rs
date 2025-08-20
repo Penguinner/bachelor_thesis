@@ -1,5 +1,6 @@
 #[cfg(feature="duckdb")]
 use crate::duckdb_connector::DuckDBConnection;
+use crate::parser::Parser;
 use crate::postgres_connector::PostgresConnection;
 use crate::qlever_connector::QLeverConnection;
 use async_compression::tokio::bufread::GzipDecoder;
@@ -16,7 +17,6 @@ use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
-use crate::parser::Parser;
 
 mod parser;
 #[cfg(feature = "duckdb")]

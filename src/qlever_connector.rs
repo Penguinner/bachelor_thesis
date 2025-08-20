@@ -1,8 +1,8 @@
+use reqwest::Client;
+use serde::Deserialize;
 use std::env;
 use std::error::Error;
 use std::process::Command;
-use reqwest::Client;
-use serde::Deserialize;
 use tokio::runtime::Runtime;
 
 pub struct QLeverConnection {
