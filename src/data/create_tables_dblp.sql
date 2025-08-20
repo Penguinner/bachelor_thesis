@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS Editors(
 CREATE TABLE IF NOT EXISTS Authors(
     key INTEGER PRIMARY KEY,
     name VARCHAR(255) NOT NUll,
-    id VARCHAR(4) NOT NULL,
+    id INTEGER NOT NULL,
     mdate DATE,
     UNIQUE(name, id)
 );
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS Publications(
 CREATE TABLE IF NOT EXISTS Resources(
     id INTEGER PRIMARY KEY,
     type VARCHAR(255) NOT NULL,
-    value VARCHAR(255) NOT NULL,
+    value TEXT NOT NULL,
     publication_key VARCHAR(255),
     FOREIGN KEY (publication_key) REFERENCES Publications(key)
 );
@@ -84,14 +84,14 @@ CREATE TABLE PublicationAuthors(
 CREATE TABLE IF NOT EXISTS AuthorWebsites(
     id INTEGER PRIMARY KEY,
     author_id INT,
-    url VARCHAR(255),
+    url TEXT,
     FOREIGN KEY(author_id) REFERENCES Authors(key)
 );
 
 CREATE TABLE IF NOT EXISTS Affiliations(
     id INTEGER PRIMARY KEY,
     author_id INT,
-    affiliation VARCHAR(255),
+    affiliation TEXT,
     type aff_type,
     FOREIGN KEY(author_id) REFERENCES Authors(key)                                   
 );
