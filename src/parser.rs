@@ -306,18 +306,18 @@ impl Parser {
             let mut auth_ids_present: Vec<usize> = Vec::new();
             for author in publication.authors.iter() {
                 if !self.author_map.contains_key(&(author.name.clone(), author.id)) {
-                    self.author_map.insert((author.name.clone(), author.id), self.next_author_id);
-                    self.next_author_id += 1;
+                    println!("{:?}",  author);
+                    continue
                 }
                 let auth_id =  self.author_map.get(&(author.name.clone(), author.id)).unwrap();
-                if !auth_ids_present.contains(&auth_id) { // Filter out duplicate Authors
-                    self.writer.write_publication_author((
-                        publication.key.clone(),
-                        self.author_map.get(&(author.name.clone(), author.id)).unwrap().clone(),
-                    ));
-                    auth_ids_present.push(auth_id.clone());
+                if auth_ids_present.contains(&auth_id) { // Filter out duplicate Author
+                    continue
                 }
-                
+                self.writer.write_publication_author((
+                    publication.key.clone(),
+                    self.author_map.get(&(author.name.clone(), author.id)).unwrap().clone(),
+                ));
+                auth_ids_present.push(auth_id.clone());
         }
     }
 }
