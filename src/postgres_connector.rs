@@ -124,7 +124,7 @@ impl PostgresConnection {
         for (table, file) in queries.iter() {
             let mut file = File::open(file).unwrap();
             let mut reader = BufReader::new(file);
-            let mut sink = transaction.copy_in(&format!("COPY {} FROM STDIN (DELIMITER E'\\t', HEADER true)", table)).unwrap();
+            let mut sink = transaction.copy_in(&format!("COPY {} FROM STDIN (FORMAT CSV, DELIMITER E'\\t', HEADER true)", table)).unwrap();
             
             let mut buffer = String::new();
             loop {
