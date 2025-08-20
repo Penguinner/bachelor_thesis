@@ -37,18 +37,18 @@ impl DuckDBConnection {
     pub fn insert_dblp_data(&mut self) {
         let query = format!(
             "BEGIN;\n\
-             COPY Venues FROM '{0}' (DELIMITER '\\t', HEADER);\n\
-             COPY Publishers FROM '{1}' (DELIMITER '\\t', HEADER);\n\
-             COPY Editors FROM '{2}' (DELIMITER '\\t', HEADER);\n\
-             COPY Authors FROM '{3}' (DELIMITER '\\t', HEADER);\n\
-             COPY Publications FROM '{4}' (DELIMITER '\\t', HEADER);\n\
-             COPY Resources FROM '{5}' (DELIMITER '\\t', HEADER);\n\
-             COPY PublicationEditors FROM '{6}' (DELIMITER '\\t', HEADER);\n\
-             COPY Reference FROM '{7}' (DELIMITER '\\t', HEADER);\n\
-             COPY PublicationAuthors FROM '{8}' (DELIMITER '\\t', HEADER);\n\
-             COPY AuthorWebsites FROM '{9}' (DELIMITER '\\t', HEADER);\n\
-             COPY Affiliations FROM '{10}' (DELIMITER '\\t', HEADER);\n\
-             COPY Alias FROM '{11}' (DELIMITER '\\t', HEADER);\n\
+             COPY Venues FROM '{0}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY Publishers FROM '{1}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY Editors FROM '{2}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY Authors FROM '{3}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY Publications FROM '{4}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY Resources FROM '{5}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY PublicationEditors FROM '{6}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY Reference FROM '{7}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY PublicationAuthors FROM '{8}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY AuthorWebsites FROM '{9}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY Affiliations FROM '{10}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
+             COPY Alias FROM '{11}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
              END;",
             VENUE_FILE,
             PUBLISHER_FILE,
