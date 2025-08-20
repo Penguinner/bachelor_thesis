@@ -201,9 +201,10 @@ impl Parser {
                     b"cite" | b"crossref"=> {
                         let text = self.read_text(&e)?;
                         if !text.contains("homepages/") && re_pubkey.is_match(&text) { // Filter out homepage references and not proper refrences
-                            publication
-                                .references
-                                .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), text));
+                            let reference = (String::from_utf8_lossy(e.name().as_ref()).into_owned(), text);
+                            if ! publication.references.contains(&reference) {
+                                publication.references.push(reference);
+                            }
                         }
                     }
                     b"url" | b"ee" | b"series" | b"stream"=> publication
