@@ -135,7 +135,9 @@ impl Parser {
                         let author = self.read_text(&e)?;
                         let mut person = Person::new();
                         person.add_name(author);
-                        publication.authors.push(person);
+                        if !publication.authors.contains(&person) {
+                            publication.authors.push(person);
+                        }
                     }
                     b"title" => {
                         publication.title = self.read_text(&e)?;
@@ -520,7 +522,7 @@ impl fmt::Debug for Publication {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq)]
 pub struct Person {
     name: String,
     id: usize,
