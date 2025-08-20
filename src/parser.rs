@@ -103,6 +103,7 @@ impl Parser {
     fn read_publication(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut publication = Publication::new();
+        let re_pubkey = Regex::new(r"\S+/\S+/\S+").unwrap();
         publication.key = String::from(
             eve.try_get_attribute("key")
                 .unwrap()
@@ -199,7 +200,7 @@ impl Parser {
                     }
                     b"cite" | b"crossref"=> {
                         let text = self.read_text(&e)?;
-                        if !text.contains("homepages/") { // Filter out homepage refrences
+                        if !text.contains("homepages/") && re_pubkey.is_match(&text) { // Filter out homepage references and not proper refrences
                             publication
                                 .references
                                 .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), text));
