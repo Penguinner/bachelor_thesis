@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS Reference(
     type ref_type,
     origin_pub VARCHAR(255),
     dest_pub VARCHAR(255),
-    PRIMARY KEY (origin_pub, dest_pub),
+    PRIMARY KEY (type, origin_pub, dest_pub),
     FOREIGN KEY(origin_pub) REFERENCES Publications(key),
     FOREIGN KEY(dest_pub) REFERENCES Publications(key)
 );
