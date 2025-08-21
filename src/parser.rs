@@ -619,7 +619,7 @@ impl WriteManager {
         touch_file(PUBLICATION_AUTHORS_FILE, &["publication_key", "author_id"]);
         touch_file(AUTHOR_WEBSITES_FILE, &["id", "author_id", "url"]);
         touch_file(AFFILIATIONS_FILE, &["id", "author_id", "affiliation", "type"]);
-        touch_file(ALIAS_FILE, &["id", "author_id", "alias"]);
+        touch_file(ALIAS_FILE, &["id", "author_id", "alias", "alias_id"]);
         WriteManager {
             venues: vec![],
             publishers: vec![],
