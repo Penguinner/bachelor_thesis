@@ -1032,6 +1032,6 @@ fn read_person_name(name: &str) -> (String, usize) {
         (name, id)
     } else {
         let name = name.to_string();
-        (name, 1)
+        (name, 0)
     }
 }
