@@ -192,7 +192,7 @@ pub struct TSVRecord {
     sql: String,
     sparql: String,
     columns: usize,
-    row: usize,
+    rows: usize,
 }
 
 fn read_test_file(filename: &str) -> Result<Vec<TSVRecord>, Box<dyn Error>> {
@@ -217,13 +217,13 @@ impl Connection {
         match self {
             #[cfg(feature="duckdb")]
             Connection::DuckDB(connection) => {
-                connection.run_test_query(record.sql.as_ref(), record.row, record.columns)
+                connection.run_test_query(record.sql.as_ref(), record.rows, record.columns)
             },
             Connection::PostGres(connection) => {
-                connection.run_test_query(record.sql.as_ref(), record.row, record.columns)
+                connection.run_test_query(record.sql.as_ref(), record.rows, record.columns)
             },
             Connection::QLever(connection) => {
-                connection.run_test_query(record.sparql.as_ref(), record.row, record.columns)
+                connection.run_test_query(record.sparql.as_ref(), record.rows, record.columns)
             }
         }
     }
