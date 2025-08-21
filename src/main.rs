@@ -189,8 +189,8 @@ pub enum QueryLang {
 #[derive(Debug, Deserialize)]
 pub struct TSVRecord {
     name: String,
-    sql_query: String,
-    sparql_query: String,
+    sql: String,
+    sparql: String,
     columns: usize,
     row: usize,
 }
@@ -217,13 +217,13 @@ impl Connection {
         match self {
             #[cfg(feature="duckdb")]
             Connection::DuckDB(connection) => {
-                connection.run_test_query(record.sql_query.as_ref(), record.row, record.columns)
+                connection.run_test_query(record.sql.as_ref(), record.row, record.columns)
             },
             Connection::PostGres(connection) => {
-                connection.run_test_query(record.sql_query.as_ref(), record.row, record.columns)
+                connection.run_test_query(record.sql.as_ref(), record.row, record.columns)
             },
             Connection::QLever(connection) => {
-                connection.run_test_query(record.sparql_query.as_ref(), record.row, record.columns)
+                connection.run_test_query(record.sparql.as_ref(), record.row, record.columns)
             }
         }
     }
