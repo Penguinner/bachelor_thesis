@@ -543,7 +543,7 @@ impl Person {
     fn new() -> Person {
         Person {
             name: String::new(),
-            id: 1,
+            id: 0,
             alias: Vec::new(),
             mdate: String::new(),
             affiliations: Vec::new(),
