@@ -134,7 +134,7 @@ impl Parser {
                     b"author" => {
                         let author = self.read_text(&e)?;
                         let mut person = Person::new();
-                        person.add_name(author);
+                        person.add_name(author.as_str());
                         if !publication.authors.contains(&person) {
                             publication.authors.push(person);
                         }
@@ -337,9 +337,9 @@ fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
                     b"author" => {
                         let author = self.read_text(&e)?;
                         if person.name == String::new() {
-                            person.add_name(author);
+                            person.add_name(author.as_str());
                         } else {
-                            person.alias.push(author);
+                            person.alias.push(read_person_name(&author));
                         }
                     }
                     b"note" => {
@@ -409,11 +409,12 @@ fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
         }
         // Alias
         for alias in person.alias.iter() {
-            self.author_map.insert((alias.clone(), 0), self.next_author_id);
+            self.author_map.insert((alias.0.clone(), alias.1.clone()), self.next_author_id);
             self.writer.write_aliases((
                 self.next_alias_id,
                 self.next_author_id,
-                alias.clone(),
+                alias.0.clone(),
+                alias.1.clone()
                 ));
             self.next_alias_id += 1;
         }
@@ -532,7 +533,7 @@ impl fmt::Debug for Publication {
 pub struct Person {
     name: String,
     id: usize,
-    alias: Vec<String>,
+    alias: Vec<(String, usize)>,
     mdate: String,
     affiliations: Vec<(String, String)>,
     urls: Vec<String>,
@@ -542,7 +543,7 @@ impl Person {
     fn new() -> Person {
         Person {
             name: String::new(),
-            id: 0,
+            id: 1,
             alias: Vec::new(),
             mdate: String::new(),
             affiliations: Vec::new(),
@@ -550,17 +551,8 @@ impl Person {
         }
     }
 
-    fn add_name(&mut self, name: String) {
-        let re = Regex::new(r"(.*)\s+(\d+)").unwrap();
-        let name = name.trim();
-        if re.is_match(&name) {
-            re.captures(name).map(|caps| {
-                self.name = caps[1].to_string();
-                self.id = caps[2].parse::<usize>().unwrap();
-            });
-        } else {
-            self.name = name.to_string();
-        }
+    fn add_name(&mut self, name: &str) {
+        (self.name, self.id) = read_person_name(name);
     }
 
     fn check_valid(&self) -> bool {
@@ -596,7 +588,7 @@ struct WriteManager {
     publication_authors: Vec<(String, usize)>,
     author_websites: Vec<(usize, usize, String)>,
     affiliations: Vec<(usize, usize, String, String)>,
-    aliases: Vec<(usize, usize, String)>,
+    aliases: Vec<(usize, usize, String, usize)>,
 }
 
 impl WriteManager {
@@ -831,7 +823,7 @@ impl WriteManager {
             self.affiliations.clear()
         }
     }
-    pub fn write_aliases(&mut self, tuple: (usize, usize, String)) {
+    pub fn write_aliases(&mut self, tuple: (usize, usize, String, usize)) {
         self.aliases.push(tuple);
         if self.aliases.len() == 10000 {
             let mut wrt = WriterBuilder::new()
@@ -1029,4 +1021,17 @@ where
     let mut wrt = WriterBuilder::new().delimiter(b'\t').from_path(file).unwrap();
     wrt.write_record(record).unwrap();
     wrt.flush().unwrap();
+}
+
+fn read_person_name(name: &str) -> (String, usize) {
+    let re = Regex::new(r"(.*)\s+(\d+)").unwrap();
+    let name = name.trim();
+    if let Some(caps) = re.captures(name) {
+        let name = caps.get(1).unwrap().as_str().to_string();
+        let id = caps.get(2).unwrap().as_str().parse::<usize>().unwrap();
+        (name, id)
+    } else {
+        let name = name.to_string();
+        (name, 1)
+    }
 }

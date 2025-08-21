@@ -1,7 +1,6 @@
 CREATE TYPE pub_type AS ENUM('article', 'inproceedings', 'proceedings', 'book', 'incollection', 'phdthesis', 'masterthesis', 'www');
 CREATE TYPE venue_type AS ENUM ('journal', 'conference', 'book');
 CREATE TYPE ref_type AS ENUM ('crossref', 'cite');
-CREATE TYPE aff_type AS ENUM('current', 'former');
 
 CREATE TABLE IF NOT EXISTS Venues(
     id INTEGER PRIMARY KEY,
@@ -92,7 +91,7 @@ CREATE TABLE IF NOT EXISTS Affiliations(
     id INTEGER PRIMARY KEY,
     author_id INT,
     affiliation TEXT,
-    type aff_type,
+    type VARCHAR(255),
     FOREIGN KEY(author_id) REFERENCES Authors(key)                                   
 );
 
@@ -100,5 +99,6 @@ CREATE TABLE IF NOT EXISTS Alias(
     id INTEGER PRIMARY KEY,
     author_id INT,
     alias VARCHAR(255),
+    alias_id INT,
     FOREIGN KEY (author_id) REFERENCES Authors(key)
 );
