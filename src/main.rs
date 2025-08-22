@@ -280,11 +280,10 @@ fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -
 
 fn clear_cache() -> Result<(), Box<dyn Error>> {
     // Clear Cache
-    let sync = Command::new("sync").status().expect("Failed running sync");
-    if !sync.success() {
-        return Err("Failed running sync".into());
-    }
-    File::create("/proc/sys/vm/drop_caches")?.write_all(b"3\n")?;
+    let _ = Command::new("bash")
+        .arg("-c")
+        .arg("sync; sleep 5; echo 3 > /proc/sys/vm/drop_caches")
+        .output().unwrap();
     Ok(())
 }
 
