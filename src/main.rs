@@ -257,7 +257,7 @@ impl TestResult {
 
 fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
-    let mut failures: Vec<usize> = Vec::new();
+    let mut failures: Vec<usize> = vec![0; queries.len()];
     let mut results: Vec<Vec<u128>> = Vec::new();
 
     for _ in 0 .. iterations {
