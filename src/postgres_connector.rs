@@ -138,7 +138,7 @@ impl PostgresConnection {
             sink.finish().unwrap();
         }
         transaction.commit().unwrap();
-        println!("Inserted DBLP data");
+        println!("Inserted DBLP data into Postgres");
     }
     
     pub fn run_test_query(&mut self, query: &str, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
@@ -148,7 +148,13 @@ impl PostgresConnection {
         if result.len() == rows && result.get(0).unwrap().len() == columns {
             return Ok(duration)
         }
-        Err("Result doesn't match expected size".into())
+        Err(format!(
+            "Result doesn't match expected size:\n Expected: Rows {0}, Columns {1}\n Got: Rows {2} Columns {3}",
+            rows,
+            columns,
+            result.len(),
+            result.get(0).unwrap().len()
+        ).into())
     }
     
     pub fn close(&mut self) -> Result<(), Box<dyn Error>> {

@@ -64,7 +64,7 @@ impl DuckDBConnection {
             ALIAS_FILE
         );
         self.connection.execute_batch(&query).unwrap();
-        println!("Inserted DBLP data");
+        println!("Inserted DBLP data into DuckDB");
     }
 
     pub fn run_test_query(&self, query: &str, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
@@ -75,7 +75,13 @@ impl DuckDBConnection {
         if stmt.row_count() == rows && stmt.column_count() == columns {
             return Ok(duration)
         }
-        Err("Result doesn't match expected size")?
+        Err(format!(
+            "Result doesn't match expected size:\n Expected: Rows {0}, Columns {1}\n Got: Rows {2} Columns {3}",
+            rows,
+            columns,
+            stmt.row_count(),
+            stmt.column_count()
+        ).into())
     }
     
     pub fn close(self) -> Result<(), Box<dyn Error>> {
