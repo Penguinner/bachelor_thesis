@@ -17,7 +17,13 @@ impl QLeverConnection {
         
         let result: (u128, usize, usize) = handle.block_on(self.do_query_request(query)).expect("query failed");
         if result.1 != rows || result.2 != columns {
-            return Err("Result doesn't match expected size".into())
+            return Err(format!(
+                "Result doesn't match expected size:\n Expected: Rows {0}, Columns {1}\n Got: Rows {2} Columns {3}",
+                rows,
+                columns,
+                result.1,
+                result.2
+            ).into())
         }
         Ok(result.0)
     }
