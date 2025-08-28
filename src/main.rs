@@ -259,15 +259,20 @@ fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -
     let queries = read_test_file(filename.as_str())?;
     let mut failures: Vec<usize> = vec![0; queries.len()];
     let mut results: Vec<Vec<u128>> = Vec::new();
-
-    for _ in 0 .. iterations {
+    for iter in 0 .. iterations {
         clear_cache().expect("Failed to clear cache");
         // Run Queries
         for (id, record) in queries.iter().enumerate() {
             let result = connection.run_test_query(record);
             match result {
-                Ok(value) => results[id].push(value),
-                Err(_) => failures[id].add_assign(1)
+                Ok(value) => {
+                    println!("Iteration: {0} Query: {1} Success", iter, id);
+                    results[id].push(value) 
+                },
+                Err(e) => {
+                    println!("Iteration: {0} Query: {1} Failed: {2}", iter, id, e);
+                    failures[id].add_assign(1)
+                }
             }
         }
     }
