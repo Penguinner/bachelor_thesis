@@ -242,11 +242,12 @@ impl QLeverConnection {
 }
 
 #[derive(Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
 pub struct QleverFile {
     pub data: HashMap<String, String>,
     pub index: HashMap<String, String>,
     pub server: HashMap<String, String>,
+    #[serde(flatten)]
+    pub others: HashMap<String, String>,
 }
 
 impl QleverFile {
