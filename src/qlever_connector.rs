@@ -232,7 +232,7 @@ impl QLeverConnection {
 }
 
 #[derive(Deserialize, Clone)]
-#[serde(ignore_unknown_fields)]
+#[serde(deny_unknown_fields)]
 struct QleverFile {
     pub data: HashMap<String, String>,
     pub index: HashMap<String, String>,
