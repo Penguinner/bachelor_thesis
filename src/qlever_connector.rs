@@ -247,7 +247,7 @@ pub struct QleverFile {
     pub index: HashMap<String, String>,
     pub server: HashMap<String, String>,
     #[serde(flatten)]
-    pub others: HashMap<String, String>,
+    pub others: HashMap<String, toml::Value>,
 }
 
 impl QleverFile {
