@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use reqwest::Client;
 use serde::Deserialize;
-use std::{env, fs};
+use std::fs;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
@@ -30,7 +30,7 @@ impl QLeverConnection {
         Ok(conn)
     }
     
-    pub fn setup_config(dataset: &String) -> QleverFile {
+    fn setup_config(dataset: &String) -> QleverFile {
 
         let target = match dataset.as_str() {
             "dblp" => Some("https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp"),
@@ -41,17 +41,22 @@ impl QLeverConnection {
         if let Some(target) = target {
             let response = reqwest::blocking::get(target).unwrap();
             let content = response.text().unwrap();
-            let mut qlever = toml::from_str::<QleverFile>(&content).unwrap();
-            return qlever
+            return toml::from_str::<QleverFile>(&Self::sanitize_toml(content)).unwrap();
         }
         panic!("Missing config")
     }
+
+    fn sanitize_toml(string: String) -> String {
+        let regex = Regex::new("#.*\n").unwrap();
+        let new_toml = regex.replace_all(string.as_str(), "").to_string();
+        new_toml
+    }
     
-    pub fn get_data(qlever_file: &QleverFile) {
+    fn get_data(qlever_file: &QleverFile) {
         command_assist("bash", &["-c", qlever_file.data.get("GET_DATA").unwrap().as_str()], qlever_file.data.get("NAME").unwrap().as_str()).unwrap()
     }
     
-    pub fn index(qlever_file: &QleverFile) {
+    fn index(qlever_file: &QleverFile) {
         // create settings json
         let name = qlever_file.data.get("NAME").unwrap().as_str();
         let path = format!("{name}/{name}.settings.json");
@@ -100,7 +105,7 @@ impl QLeverConnection {
         command_assist("bash", &["-c", command.as_str()], name).unwrap()
     }
     
-    pub fn start(qlever_file: &QleverFile) -> QLeverConnection {
+    fn start(qlever_file: &QleverFile) -> QLeverConnection {
         // docker run -d --restart=unless-stopped
         // -u $(id -u):$(id -g)
         // -v /etc/localtime:/etc/localtime:ro
@@ -233,7 +238,7 @@ impl QLeverConnection {
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
-struct QleverFile {
+pub struct QleverFile {
     pub data: HashMap<String, String>,
     pub index: HashMap<String, String>,
     pub server: HashMap<String, String>,
