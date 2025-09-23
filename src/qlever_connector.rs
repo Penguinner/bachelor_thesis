@@ -101,16 +101,16 @@ impl QLeverConnection {
     }
     
     pub fn start(qlever_file: &QleverFile) -> QLeverConnection {
-        // docker run -d --restart=unless-stopped 
-        // -u $(id -u):$(id -g) 
-        // -v /etc/localtime:/etc/localtime:ro 
-        // -v $(pwd):/index 
-        // -p 7015:7015 
-        // -w /index 
-        // --name qlever.server.dblp 
-        // --init 
-        // --entrypoint bash 
-        // docker.io/adfreiburg/qlever:latest -c 
+        // docker run -d --restart=unless-stopped
+        // -u $(id -u):$(id -g)
+        // -v /etc/localtime:/etc/localtime:ro
+        // -v $(pwd):/index
+        // -p 7015:7015
+        // -w /index
+        // --name qlever.server.dblp
+        // --init
+        // --entrypoint bash
+        // docker.io/adfreiburg/qlever:latest -c
         // 'ServerMain -i dblp -j 8 -p 7015 -m 10G -c 5G -e 1G -k 200 -s 300s -a dblp_yGJxTdx6CXRb > dblp.server-log.txt 2>&1'
         let name = qlever_file.data.get("NAME").unwrap().as_str();
         let uid = String::from_utf8(
@@ -129,7 +129,7 @@ impl QLeverConnection {
         ).unwrap();
         let wd = format!("{name}/index");
         let port = qlever_file.server.get("PORT").unwrap().as_str();
-        
+
         let mut command = format!(
             "docker run -d --restart=unless-stopped \
             -u {uid}:{gid} \
@@ -232,6 +232,7 @@ impl QLeverConnection {
 }
 
 #[derive(Deserialize, Clone)]
+#[serde(ignore_unknown_fields)]
 struct QleverFile {
     pub data: HashMap<String, String>,
     pub index: HashMap<String, String>,
@@ -341,25 +342,6 @@ fn command_assist(command: &str, args: &[&str], current_dir: &str) -> Result<(),
         .current_dir(current_dir)
         .output()
         .expect(("Failed executing command ".to_string() + command + " " + args.join(" ").as_str()).as_ref());
-    println!("status: {}", &command.status);
-    println!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
-    println!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
-    if command.status.success() {
-        Ok(())
-    } else {
-        Err(format!("Command failed status code: {}", command.status).into())
-    }
-}
-
-fn command_assist_qlever(args: &[&str], qlever_file: &str) -> Result<(), Box<dyn Error>> {
-    let command = Command::new("qlever")
-        .args(args)
-        .env("PATH", format!("/usr/qlever-venv/bin:{}", env::var("PATH").unwrap()))
-        .env("VIRTUAL_ENV", "/usr/qlever-venv")
-        .current_dir(format!("/usr/src/bachelor_thesis/src/data/{}", &qlever_file).as_str())
-        .output()
-        .expect(("Failed to execute command ".to_string() + args.join(" ").as_str()).as_str());
-
     println!("status: {}", &command.status);
     println!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
     println!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
