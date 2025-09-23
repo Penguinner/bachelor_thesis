@@ -8,7 +8,7 @@ use std::io::Write;
 use std::process::Command;
 use bollard::Docker;
 use glob::glob;
-use regex::Regex;
+use regex::{Captures, Regex};
 use serde_json::Value;
 use tokio::runtime::Runtime;
 
@@ -47,9 +47,14 @@ impl QLeverConnection {
     }
 
     fn sanitize_toml(string: String) -> String {
-        let regex = Regex::new("#.*\n").unwrap();
-        let new_toml = regex.replace_all(string.as_str(), "").to_string();
-        new_toml
+        let comments = Regex::new("#.*\n").unwrap();
+        let jsons = Regex::new("\s(\{\s.+})").unwrap();
+        let mut new_toml = comments.replace_all(string.as_str(), "").to_string();
+        new_toml = jsons.replace_all(new_toml.as_str(), |caps: &Captures| {
+            let word = caps[1].to_string();
+            format!("'''{word}'''")
+        }).to_string();
+        new_toml.trim().to_string()
     }
     
     fn get_data(qlever_file: &QleverFile) {
