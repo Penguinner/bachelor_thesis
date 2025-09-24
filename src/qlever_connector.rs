@@ -22,11 +22,15 @@ impl QLeverConnection {
     pub fn new(dataset: &String) -> Result<QLeverConnection, Box<dyn Error>> {
         let mut qlever_file = QLeverConnection::setup_config(dataset);
         qlever_file.replace_internal_variables();
+        println!("Finished Setup Config");
         // Create directory
         fs::create_dir(qlever_file.data.get("NAME").unwrap().as_str())?;
         QLeverConnection::get_data(&qlever_file);
+        println!("Finished Fetching Data");
         QLeverConnection::index(&qlever_file);
+        println!("Finished Indexing");
         let conn = QLeverConnection::start(&qlever_file);
+        println!("Finished startup");
         Ok(conn)
     }
     
