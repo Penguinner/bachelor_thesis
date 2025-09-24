@@ -88,11 +88,11 @@ impl QLeverConnection {
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
             command += format!("IndexBuilderMain \
             -i {name} \
-            -s {name}.settings.json \
+            -s data/{name}/{name}.settings.json \
             --vocabulary-type on-disk-compressed").as_str();
             let mulit_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
             let json: Value = serde_json::from_str(&mulit_json).unwrap();
-            let glob_cmd = name.to_string() + "/" + json["for-each"].as_str().unwrap();
+            let glob_cmd = format!("data/{name}/{0}", json["for-each"].as_str().unwrap());
             println!("{:?}", glob_cmd);
             for file in glob(glob_cmd.as_str()).unwrap() {
                 let file_path = file.unwrap().as_path().to_str().unwrap().to_string();
@@ -100,12 +100,16 @@ impl QLeverConnection {
                 command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str()
             }
         } else {
-            command += qlever_file.index.get("CAT_INPUT_FILES").unwrap().as_str();
+            let mut cat = qlever_file.index.get("CAT_INPUT_FILES")
+                .unwrap()
+                .split_whitespace().collect::<Vec<&str>>();
+            cat[1] = format!("data/{name}/{0}", cat[1]).as_str();
+            command += cat.join(" ").as_str();
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
             command += format!(
                 " IndexBuilderMain \
                 -i {name} \
-                -s {name}.settings.json \
+                -s data/{name}/{name}.settings.json \
                 --vocabulary-type on-disk-compressed -F ttl -f - \
                 --stxxl-memory {stxxl}\
                 "
