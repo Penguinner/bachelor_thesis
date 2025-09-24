@@ -90,7 +90,9 @@ impl QLeverConnection {
             -i {name} \
             -s {name}.settings.json \
             --vocabulary-type on-disk-compressed";
-            let json: Value = serde_json::from_str(&qlever_file.data.get("MULTI_INPUT_JSON").unwrap()).unwrap();
+            let mulit_json = qlever_file.data.get("MULTI_INPUT_JSON").unwrap();
+            println!("{:?}", mulit_json);
+            let json: Value = serde_json::from_str(&mulit_json).unwrap();
             for file in glob(json["for-each"].as_str().unwrap()).unwrap() {
                 let file_path = file.unwrap().as_path().to_str().unwrap().to_string();
                 let cmd = json["cmd"].as_str().unwrap();
@@ -260,7 +262,6 @@ impl QleverFile {
         // Iterate over Data
         self.data = self.data.iter().map(|(orig_key, value)| {
             let mut changed = value.clone();
-            println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
                 changed = regex.replace_all(changed.as_str(), |cap: &Captures|{
                     let prefix = cap.name("prefix");
@@ -273,15 +274,12 @@ impl QleverFile {
                     }
                 }
                 ).to_string();
-                println!("{}", changed);
             }
             (orig_key.to_string(), changed)
         }).collect();
-        println!("Data replaced");
         // Iterate over Index
         self.index = self.index.iter().map(|(orig_key, value)| {
             let mut changed = value.clone();
-            println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
                 changed = regex.replace_all(changed.as_str(), |cap: &Captures|{
                     let prefix = cap.name("prefix");
@@ -294,15 +292,12 @@ impl QleverFile {
                     }
                 }
                 ).to_string();
-                println!("{}", changed);
             }
             (orig_key.to_string(), changed)
         }).collect();
-        println!("Index replaced");
         // Iterate over Server
         self.server = self.server.iter().map(|(orig_key, value)| {
             let mut changed = value.clone();
-            println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
                 changed = regex.replace_all(changed.as_str(), |cap: &Captures|{
                     let prefix = cap.name("prefix");
@@ -315,11 +310,9 @@ impl QleverFile {
                     }
                 }
                 ).to_string();
-                println!("{}", changed);
             }
             (orig_key.to_string(), changed)
         }).collect();
-        println!("Server replaced");
     }
 }
 
