@@ -21,8 +21,8 @@ impl QLeverConnection {
     
     pub fn new(dataset: &String) -> Result<QLeverConnection, Box<dyn Error>> {
         let mut qlever_file = QLeverConnection::setup_config(dataset);
-        qlever_file.replace_internal_variables();
         println!("Finished Setup Config");
+        qlever_file.replace_internal_variables();
         // Create directory
         fs::create_dir(qlever_file.data.get("NAME").unwrap().as_str())?;
         QLeverConnection::get_data(&qlever_file);
@@ -282,7 +282,9 @@ impl QleverFile {
         // Iterate over Index
         self.index = self.index.iter().map(|(orig_key, value)| {
             let mut changed = value.clone();
+            println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
+                println!("{changed}");
                 for cap in regex.captures_iter(value) {
                     let matched = cap.get(0).unwrap().as_str();
                     let prefix = cap.name("prefix");
