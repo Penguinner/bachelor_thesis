@@ -262,7 +262,6 @@ impl QleverFile {
             let mut changed = value.clone();
             println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
-                println!("{changed}");
                 for cap in regex.captures_iter(value) {
                     let matched = cap.get(0).unwrap().as_str();
                     let prefix = cap.name("prefix");
@@ -276,6 +275,7 @@ impl QleverFile {
                     
                     if let Some(replacement) = replacer {
                         changed = changed.replace(matched, replacement.as_str());
+                        println!("{changed}");
                     }
                 }
             }
@@ -286,7 +286,6 @@ impl QleverFile {
             let mut changed = value.clone();
             println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
-                println!("{changed}");
                 for cap in regex.captures_iter(value) {
                     let matched = cap.get(0).unwrap().as_str();
                     let prefix = cap.name("prefix");
@@ -310,7 +309,6 @@ impl QleverFile {
             let mut changed = value.clone();
             println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
-                println!("{changed}");
                 for cap in regex.captures_iter(value) {
                     let matched = cap.get(0).unwrap().as_str();
                     let prefix = cap.name("prefix");
