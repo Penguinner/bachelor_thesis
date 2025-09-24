@@ -273,6 +273,7 @@ impl QleverFile {
                     }
                 }
                 ).to_string();
+                println!("{}", changed);
             }
             (orig_key.to_string(), changed)
         }).collect();
@@ -282,47 +283,43 @@ impl QleverFile {
             let mut changed = value.clone();
             println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
-                for cap in regex.captures_iter(value) {
-                    let matched = cap.get(0).unwrap().as_str();
+                changed = regex.replace_all(changed.as_str(), |cap: &Captures|{
                     let prefix = cap.name("prefix");
                     let key = cap.name("key").unwrap().as_str();
-                    let replacer = match prefix {
-                        Some(prefix) if prefix.as_str() == "data" => self.data.get(key),
-                        Some(prefix) if prefix.as_str() == "index" => self.index.get(key),
-                        Some(prefix) if prefix.as_str() == "server" => self.server.get(key),
-                        None | Some(_) => self.index.get(key)
-                    };
-
-                    if let Some(replacement) = replacer {
-                        changed = changed.replace(matched, replacement.as_str());
+                    match prefix {
+                        Some(prefix) if prefix.as_str() == "data" => self.data.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "index" => self.index.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "server" => self.server.get(key).unwrap(),
+                        None | Some(_) => self.index.get(key).unwrap()
                     }
                 }
+                ).to_string();
+                println!("{}", changed);
             }
             (orig_key.to_string(), changed)
         }).collect();
+        println!("Index replaced");
         // Iterate over Server
         self.server = self.server.iter().map(|(orig_key, value)| {
             let mut changed = value.clone();
             println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
-                for cap in regex.captures_iter(value) {
-                    let matched = cap.get(0).unwrap().as_str();
+                changed = regex.replace_all(changed.as_str(), |cap: &Captures|{
                     let prefix = cap.name("prefix");
                     let key = cap.name("key").unwrap().as_str();
-                    let replacer = match prefix {
-                        Some(prefix) if prefix.as_str() == "data" => self.data.get(key),
-                        Some(prefix) if prefix.as_str() == "index" => self.index.get(key),
-                        Some(prefix) if prefix.as_str() == "server" => self.server.get(key),
-                        None | Some(_) => self.server.get(key)
-                    };
-
-                    if let Some(replacement) = replacer {
-                        changed = changed.replace(matched, replacement.as_str());
+                    match prefix {
+                        Some(prefix) if prefix.as_str() == "data" => self.data.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "index" => self.index.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "server" => self.server.get(key).unwrap(),
+                        None | Some(_) => self.server.get(key).unwrap()
                     }
                 }
+                ).to_string();
+                println!("{}", changed);
             }
             (orig_key.to_string(), changed)
         }).collect();
+        println!("Server replaced");
     }
 }
 
