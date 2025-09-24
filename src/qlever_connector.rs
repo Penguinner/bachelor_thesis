@@ -62,7 +62,7 @@ impl QLeverConnection {
     }
     
     fn get_data(qlever_file: &QleverFile) {
-        command_assist("bash", &["-c", qlever_file.data.get("GET_DATA").unwrap().as_str()], qlever_file.data.get("NAME").unwrap().as_str()).unwrap()
+        command_assist("bash", &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()], qlever_file.data.get("NAME").unwrap().as_str()).unwrap()
     }
     
     fn index(qlever_file: &QleverFile) {
