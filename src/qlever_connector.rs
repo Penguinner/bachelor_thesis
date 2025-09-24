@@ -69,7 +69,7 @@ impl QLeverConnection {
         // create settings json
         let name = qlever_file.data.get("NAME").unwrap().as_str();
         let path = format!("{name}/{name}.settings.json");
-        let mut file = File::create(path).unwrap();
+        let mut file = File::create(path.clone()).unwrap();
         file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().as_bytes()).unwrap();
         // Create Index
         fs::create_dir(format!("{name}/index").as_str()).unwrap();
@@ -88,7 +88,7 @@ impl QLeverConnection {
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
             command += format!("IndexBuilderMain \
             -i {name} \
-            -s {name}.settings.json \
+            -s {path} \
             --vocabulary-type on-disk-compressed").as_str();
             let mulit_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
             let json: Value = serde_json::from_str(&mulit_json).unwrap();
