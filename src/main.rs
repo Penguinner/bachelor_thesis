@@ -132,6 +132,7 @@ fn main() {
         };
     // Run Tests
     for test in tests {
+        println!("Start of Test: {}", test.name());
         // Create Connection and insert Data
         let mut conn = test.to_connection(&data_set.to_string())
             .expect(format!("Failed to create connection for {}", test.name()).as_str());
@@ -151,7 +152,9 @@ fn main() {
         // Clean Up
         conn.close().expect(format!("Failed to close connection for {}", test.name()).as_str());
         clear_cache().expect("Failed to clear cache");
+        println!("End of Test: {}", test.name());
     }
+    println!("Finished Tests");
 }
 
 enum Database {
