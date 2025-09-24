@@ -111,7 +111,7 @@ impl QLeverConnection {
         }
 
         command += format!(" | tee {name}.index-log.txt'").as_str();
-
+        println!("{}", command);
         command_assist("bash", &["-c", command.as_str()], name).unwrap()
     }
     
