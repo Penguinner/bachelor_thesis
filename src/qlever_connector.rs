@@ -86,10 +86,10 @@ impl QLeverConnection {
         };
         // Add files arguments
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
-            command += "IndexBuilderMain \
+            command += format!("IndexBuilderMain \
             -i {name} \
             -s {name}.settings.json \
-            --vocabulary-type on-disk-compressed";
+            --vocabulary-type on-disk-compressed").as_str();
             let mulit_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
             let json: Value = serde_json::from_str(&mulit_json).unwrap();
             let glob_cmd = name.to_string() + "/" + json["for-each"].as_str().unwrap();
