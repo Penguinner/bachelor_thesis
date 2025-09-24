@@ -76,7 +76,7 @@ impl QLeverConnection {
         let mut command = format!{
             "docker run --rm -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
-            -v {name}/index:/index \
+            -v index:/index \
             -w /index \
             --name qlever.index.{name} \
             --init \
@@ -142,14 +142,13 @@ impl QLeverConnection {
                 .unwrap()
                 .stdout
         ).unwrap();
-        let wd = format!("{name}/index");
         let port = qlever_file.server.get("PORT").unwrap().as_str();
 
         let mut command = format!(
             "docker run -d --restart=unless-stopped \
             -u {uid}:{gid} \
             -v /etc/localtime:/etc/localtime:ro \
-            -v {wd}:/index \
+            -v /index:/index \
             -p {port}:{port} \
             -w /index \
             --name qlever.server.{name} \
