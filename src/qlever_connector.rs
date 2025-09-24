@@ -103,7 +103,8 @@ impl QLeverConnection {
             let mut cat = qlever_file.index.get("CAT_INPUT_FILES")
                 .unwrap()
                 .split_whitespace().collect::<Vec<&str>>();
-            cat[1] = format!("data/{name}/{0}", cat[1]).as_str();
+            let new = format!("data/{name}/{0}", cat.pop().unwrap());
+            cat.push(new.as_str());
             command += cat.join(" ").as_str();
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
             command += format!(
