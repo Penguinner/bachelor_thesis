@@ -275,7 +275,7 @@ impl QleverFile {
                     
                     if let Some(replacement) = replacer {
                         changed = changed.replace(matched, replacement.as_str());
-                        println!("{changed}");
+                        println!("{matched}: {replacement}");
                     }
                 }
             }
