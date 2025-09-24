@@ -260,7 +260,9 @@ impl QleverFile {
         // Iterate over Data
         self.data = self.data.iter().map(|(orig_key, value)| {
             let mut changed = value.clone();
+            println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
+                println!("{changed}");
                 for cap in regex.captures_iter(value) {
                     let matched = cap.get(0).unwrap().as_str();
                     let prefix = cap.name("prefix");
@@ -306,7 +308,9 @@ impl QleverFile {
         // Iterate over Server
         self.server = self.server.iter().map(|(orig_key, value)| {
             let mut changed = value.clone();
+            println!("{orig_key}: {value}");
             while regex.is_match(changed.as_str()) {
+                println!("{changed}");
                 for cap in regex.captures_iter(value) {
                     let matched = cap.get(0).unwrap().as_str();
                     let prefix = cap.name("prefix");
