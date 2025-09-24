@@ -266,9 +266,9 @@ impl QleverFile {
                     let prefix = cap.name("prefix");
                     let key = cap.name("key").unwrap().as_str();
                     match prefix {
-                        Some(prefix) if prefix.as_str() == "data" => self.data.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "index" => self.index.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "server" => self.server.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "data:" => self.data.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "index:" => self.index.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "server:" => self.server.get(key).unwrap(),
                         None | Some(_) => self.data.get(key).unwrap()
                     }
                 }
@@ -287,9 +287,9 @@ impl QleverFile {
                     let prefix = cap.name("prefix");
                     let key = cap.name("key").unwrap().as_str();
                     match prefix {
-                        Some(prefix) if prefix.as_str() == "data" => self.data.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "index" => self.index.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "server" => self.server.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "data:" => self.data.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "index:" => self.index.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "server:" => self.server.get(key).unwrap(),
                         None | Some(_) => self.index.get(key).unwrap()
                     }
                 }
@@ -308,9 +308,9 @@ impl QleverFile {
                     let prefix = cap.name("prefix");
                     let key = cap.name("key").unwrap().as_str();
                     match prefix {
-                        Some(prefix) if prefix.as_str() == "data" => self.data.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "index" => self.index.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "server" => self.server.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "data:" => self.data.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "index:" => self.index.get(key).unwrap(),
+                        Some(prefix) if prefix.as_str() == "server:" => self.server.get(key).unwrap(),
                         None | Some(_) => self.server.get(key).unwrap()
                     }
                 }
