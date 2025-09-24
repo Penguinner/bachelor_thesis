@@ -95,7 +95,7 @@ impl QLeverConnection {
             let glob_cmd = format!("{name}/{0}", json["for-each"].as_str().unwrap());
             println!("{:?}", glob_cmd);
             for file in glob(glob_cmd.as_str()).unwrap() {
-                let file_path = file.unwrap().as_path().file_name().unwrap().to_os_string();
+                let file_path = file.unwrap().as_path().canonicalize().unwrap();
                 let cmd = json["cmd"].as_str().unwrap().replace("{}", file_path.to_str().unwrap());
                 command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str()
             }
