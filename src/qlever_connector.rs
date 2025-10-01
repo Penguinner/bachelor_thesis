@@ -95,7 +95,6 @@ impl QLeverConnection {
             let mulit_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
             let json: Value = serde_json::from_str(&mulit_json).unwrap();
             let glob_cmd = format!("/data/{name}/{0}", json["for-each"].as_str().unwrap());
-            println!("{:?}", glob_cmd);
             for file in glob(glob_cmd.as_str()).unwrap() {
                 let file_path = file.unwrap();
                 let file_name = file_path.file_name().unwrap().to_str().unwrap();
@@ -115,13 +114,11 @@ impl QLeverConnection {
             ).as_str();
         }
 
-        command += format!(" | tee {name}.index-log.txt'").as_str();
-        println!("{}", command);
+        command += format!(" | tee /data/{name}.index-log.txt'").as_str();
         command_assist("bash", &["-c", command.as_str()], ".").unwrap()
     }
     
     fn start(qlever_file: &QleverFile) -> QLeverConnection {
-        panic!("Reached Start");
         // docker run -d --restart=unless-stopped
         // -u $(id -u):$(id -g)
         // -v /etc/localtime:/etc/localtime:ro
@@ -154,7 +151,7 @@ impl QLeverConnection {
             "docker run -d --restart=unless-stopped \
             -u {uid}:{gid} \
             -v /etc/localtime:/etc/localtime:ro \
-            -v /index:/index \
+            -v /data/{name}:/index \
             -p {port}:{port} \
             -w /index \
             --name qlever.server.{name} \
@@ -185,8 +182,8 @@ impl QLeverConnection {
         if let Some(timeout) = qlever_file.server.get("TIMEOUT") {
             command += format!("-s {timeout}").as_str();
         }
-        command += format!("> {name}.server-log.txt 2>&1'").as_str();
-        command_assist("bash", &["-c", command.as_str()], name).unwrap();
+        command += format!("> /data/{name}.server-log.txt 2>&1'").as_str();
+        command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         QLeverConnection {
             qlever_file: qlever_file.clone(),
             docker_id: format!("qlever.server.{name}")
