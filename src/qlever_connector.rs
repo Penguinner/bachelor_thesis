@@ -94,7 +94,7 @@ impl QLeverConnection {
             --vocabulary-type on-disk-compressed").as_str();
             let mulit_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
             let json: Value = serde_json::from_str(&mulit_json).unwrap();
-            let glob_cmd = format!("{name}/{0}", json["for-each"].as_str().unwrap());
+            let glob_cmd = format!("/data/{name}/{0}", json["for-each"].as_str().unwrap());
             println!("{:?}", glob_cmd);
             for file in glob(glob_cmd.as_str()).unwrap() {
                 let file_path = file.unwrap();
