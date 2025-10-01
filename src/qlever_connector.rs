@@ -73,7 +73,7 @@ impl QLeverConnection {
         file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().as_bytes()).unwrap();
         // Create Index
         let mut command = format!{
-            "pwd; ls -la; docker run --rm -u $(id -u):$(id -g) \
+            "docker run --rm -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
             -v {name}:/index \
             -w /index \
@@ -81,7 +81,7 @@ impl QLeverConnection {
             --init \
             --entrypoint bash \
             docker.io/adfreiburg/qlever:latest \
-            -c '"
+            -c 'ls -la;"
         };
         // Add files arguments
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
