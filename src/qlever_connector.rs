@@ -114,7 +114,7 @@ impl QLeverConnection {
             ).as_str();
         }
 
-        command += format!(" | tee /data/{name}.index-log.txt'").as_str();
+        command += format!(" | tee /index/{name}.index-log.txt'").as_str();
         command_assist("bash", &["-c", command.as_str()], ".").unwrap()
     }
     
