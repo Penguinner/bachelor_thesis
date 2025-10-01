@@ -95,7 +95,7 @@ impl QLeverConnection {
             println!("{:?}", glob_cmd);
             for file in glob(glob_cmd.as_str()).unwrap() {
                 let file_path = file.unwrap();
-                let file_name = file_path.file_name().unwrap().to_str().unwrap();
+                let file_name = file_path.to_str().unwrap();
                 let cmd = json["cmd"].as_str().unwrap().replace("{}", file_name);
                 command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str();
             }
@@ -114,7 +114,7 @@ impl QLeverConnection {
 
         command += format!(" | tee {name}.index-log.txt'").as_str();
         println!("{}", command);
-        command_assist("bash", &["-c", command.as_str()], name).unwrap()
+        command_assist("bash", &["-c", command.as_str()], "").unwrap()
     }
     
     fn start(qlever_file: &QleverFile) -> QLeverConnection {
