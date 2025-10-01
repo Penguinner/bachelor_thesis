@@ -94,9 +94,10 @@ impl QLeverConnection {
             let glob_cmd = format!("{name}/{0}", json["for-each"].as_str().unwrap());
             println!("{:?}", glob_cmd);
             for file in glob(glob_cmd.as_str()).unwrap() {
-                let file_path = file.unwrap().as_path().canonicalize().unwrap();
-                let cmd = json["cmd"].as_str().unwrap().replace("{}", file_path.to_str().unwrap());
-                command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str()
+                let file_path = file.unwrap();
+                let file_name = file_path.file_name().unwrap().to_str().unwrap();
+                let cmd = json["cmd"].as_str().unwrap().replace("{}", file_name);
+                command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str();
             }
         } else {
             command += qlever_file.index.get("CAT_INPUT_FILES").unwrap();
@@ -108,7 +109,7 @@ impl QLeverConnection {
                 --vocabulary-type on-disk-compressed -F ttl -f - \
                 --stxxl-memory {stxxl}\
                 "
-            ).as_str()
+            ).as_str();
         }
 
         command += format!(" | tee {name}.index-log.txt'").as_str();
