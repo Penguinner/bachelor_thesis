@@ -24,18 +24,18 @@ mod duckdb_connector;
 mod postgres_connector;
 mod qlever_connector;
 
-const VENUE_FILE: &str = "./src/data/venues.tsv";
-const PUBLISHER_FILE: &str = "./src/data/publishers.tsv";
-const EDITOR_FILE: &str = "./src/data/editors.tsv";
-const AUTHOR_FILE: &str = "./src/data/authors.tsv";
-const PUBLICATION_FILE: &str = "./src/data/publications.tsv";
-const RESOURCES_FILE: &str = "./src/data/resources.tsv";
-const PUBLICATION_EDITOR_FILE: &str = "./src/data/publication_editors.tsv";
-const REFERENCE_FILE: &str = "./src/data/references.tsv";
-const PUBLICATION_AUTHORS_FILE: &str = "./src/data/publication_authors.tsv";
-const AUTHOR_WEBSITES_FILE: &str = "./src/data/authors_website.tsv";
-const AFFILIATIONS_FILE: &str = "./src/data/affiliations.tsv";
-const ALIAS_FILE: &str = "./src/data/aliases.tsv";
+const VENUE_FILE: &str = "/data/venues.tsv";
+const PUBLISHER_FILE: &str = "/data/publishers.tsv";
+const EDITOR_FILE: &str = "/data/editors.tsv";
+const AUTHOR_FILE: &str = "/data/authors.tsv";
+const PUBLICATION_FILE: &str = "/data/publications.tsv";
+const RESOURCES_FILE: &str = "/data/resources.tsv";
+const PUBLICATION_EDITOR_FILE: &str = "/data/publication_editors.tsv";
+const REFERENCE_FILE: &str = "/data/references.tsv";
+const PUBLICATION_AUTHORS_FILE: &str = "/data/publication_authors.tsv";
+const AUTHOR_WEBSITES_FILE: &str = "/data/authors_website.tsv";
+const AFFILIATIONS_FILE: &str = "/data/affiliations.tsv";
+const ALIAS_FILE: &str = "/data/aliases.tsv";
 
 fn main() {
     // CLI Setup
@@ -123,8 +123,8 @@ fn main() {
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
                 
-                let _ = handle.block_on(download_dblp_data("./src/data/dblp.xml".into()));
-                let mut parser = Parser::new("./src/data/dblp.xml");
+                let _ = handle.block_on(download_dblp_data("/data/dblp.xml".into()));
+                let mut parser = Parser::new("/data/dblp.xml");
                 parser.run();
                 println!("Finished Parsing DBLP data");
             },
@@ -140,13 +140,13 @@ fn main() {
         let results = run_test(queries, iter, &mut conn)
             .expect(format!("Failed while testing for {}", test.name()).as_str());
         // Save Results
-        let _ = create_dir_all("/extern/data");
+        let _ = create_dir_all("/extern/results");
         if matches.get_flag("raw") {
-            write_results(&results, format!("/extern/data/{}.raw.tsv", test.name()))
+            write_results(&results, format!("/extern/results/{}.raw.tsv", test.name()))
                 .expect(format!("Failed while writing raw results of {} to file", test.name()).as_str());
         }
         if matches.get_flag("aggregate") {
-            write_results_aggregated(&results, format!("/extern/data/{}.aggregate.tsv", test.name()))
+            write_results_aggregated(&results, format!("/extern/results/{}.aggregate.tsv", test.name()))
                 .expect(format!("Failed while writing aggregate results of {} to file", test.name()).as_str());
         }
         // Clean Up

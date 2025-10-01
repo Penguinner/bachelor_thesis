@@ -98,7 +98,7 @@ impl PostgresConnection {
     }
 
     pub fn create_tables_dblp(&mut self) {
-        let mut file = File::open("./src/data/create_tables_dblp.sql").unwrap();
+        let mut file = File::open("/data/create_tables_dblp.sql").unwrap();
         let mut query = String::new();
         file.read_to_string(&mut query).unwrap();
         self.client.batch_execute(&query).unwrap();

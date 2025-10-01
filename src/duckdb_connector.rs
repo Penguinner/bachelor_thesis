@@ -12,7 +12,7 @@ pub struct DuckDBConnection {
 
 impl DuckDBConnection {
     pub fn new(dataset: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
-        let mut conn = DuckDBConnection { connection: Connection::open("./src/data/db.duckdb").unwrap(), dataset: dataset .to_string() };
+        let mut conn = DuckDBConnection { connection: Connection::open("/data/db.duckdb").unwrap(), dataset: dataset .to_string() };
         // TODO Add more datasets
         match dataset.as_str() {
             "dblp" => {
@@ -26,7 +26,7 @@ impl DuckDBConnection {
     }
 
     pub fn create_tables_dblp(&mut self) {
-        let mut file = File::open("./src/data/create_tables_dblp.sql").unwrap();
+        let mut file = File::open("/data/create_tables_dblp.sql").unwrap();
         let mut query = String::new();
         file.read_to_string(&mut query).unwrap();
         query = format!("BEGIN;\n {}\n COMMIT;", query);

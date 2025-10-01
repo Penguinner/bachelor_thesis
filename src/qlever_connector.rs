@@ -24,7 +24,7 @@ impl QLeverConnection {
         println!("Finished Setup Config");
         qlever_file.replace_internal_variables();
         // Create directory
-        fs::create_dir(qlever_file.data.get("NAME").unwrap().as_str())?;
+        fs::create_dir(format!("/data/{}", qlever_file.data.get("NAME").unwrap()).as_str())?;
         QLeverConnection::get_data(&qlever_file);
         println!("Finished Fetching Data");
         QLeverConnection::index(&qlever_file);
@@ -62,26 +62,29 @@ impl QLeverConnection {
     }
     
     fn get_data(qlever_file: &QleverFile) {
-        command_assist("bash", &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()], qlever_file.data.get("NAME").unwrap().as_str()).unwrap()
+        command_assist("bash",
+                       &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()],
+                       format!("/data/{}", qlever_file.data.get("NAME").unwrap()).as_str()
+        ).unwrap()
     }
     
     fn index(qlever_file: &QleverFile) {
         // create settings json
         let name = qlever_file.data.get("NAME").unwrap().as_str();
-        let path = format!("{name}/{name}.settings.json");
+        let path = format!("/data/{name}/{name}.settings.json");
         let mut file = File::create(path.clone()).unwrap();
         file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().as_bytes()).unwrap();
         // Create Index
         let mut command = format!{
-            "pwd; docker run --rm -u $(id -u):$(id -g) \
+            "docker run --rm -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
-            -v {name}:/index \
+            -v /data/{name}:/index \
             -w /index \
             --name qlever.index.{name} \
             --init \
             --entrypoint bash \
             docker.io/adfreiburg/qlever:latest \
-            -c 'ls -la;"
+            -c '"
         };
         // Add files arguments
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
