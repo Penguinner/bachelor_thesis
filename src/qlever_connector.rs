@@ -73,7 +73,7 @@ impl QLeverConnection {
         file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().as_bytes()).unwrap();
         // Create Index
         let mut command = format!{
-            "docker run --rm -u $(id -u):$(id -g) \
+            "ls -la; docker run --rm -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
             -v {name}:/index \
             -w /index \
