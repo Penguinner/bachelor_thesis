@@ -72,11 +72,10 @@ impl QLeverConnection {
         let mut file = File::create(path.clone()).unwrap();
         file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().as_bytes()).unwrap();
         // Create Index
-        fs::create_dir(format!("{name}/index").as_str()).unwrap();
         let mut command = format!{
             "docker run --rm -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
-            -v index:/index \
+            -v {name}:/index \
             -w /index \
             --name qlever.index.{name} \
             --init \
@@ -88,7 +87,7 @@ impl QLeverConnection {
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
             command += format!("IndexBuilderMain \
             -i {name} \
-            -s {path} \
+            -s {name}.settings.json \
             --vocabulary-type on-disk-compressed").as_str();
             let mulit_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
             let json: Value = serde_json::from_str(&mulit_json).unwrap();
@@ -118,6 +117,7 @@ impl QLeverConnection {
     }
     
     fn start(qlever_file: &QleverFile) -> QLeverConnection {
+        panic!("Reached Start");
         // docker run -d --restart=unless-stopped
         // -u $(id -u):$(id -g)
         // -v /etc/localtime:/etc/localtime:ro
