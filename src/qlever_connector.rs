@@ -92,8 +92,8 @@ impl QLeverConnection {
             -i {name} \
             -s {name}.settings.json \
             --vocabulary-type on-disk-compressed").as_str();
-            let mulit_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
-            let json: Value = serde_json::from_str(&mulit_json).unwrap();
+            let multi_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
+            let json: Value = serde_json::from_str(&multi_json).unwrap();
             let glob_cmd = format!("/data/{name}/{0}", json["for-each"].as_str().unwrap());
             for file in glob(glob_cmd.as_str()).unwrap() {
                 let file_path = file.unwrap();
@@ -132,25 +132,11 @@ impl QLeverConnection {
         // docker.io/adfreiburg/qlever:latest -c
         // 'ServerMain -i dblp -j 8 -p 7015 -m 10G -c 5G -e 1G -k 200 -s 300s -a dblp_yGJxTdx6CXRb > dblp.server-log.txt 2>&1'
         let name = qlever_file.data.get("NAME").unwrap().as_str();
-        let uid = String::from_utf8(
-            Command::new("id")
-                .arg("-u")
-                .output()
-                .unwrap()
-                .stdout
-        ).unwrap();
-        let gid = String::from_utf8(
-            Command::new("id")
-                .arg("-g")
-                .output()
-                .unwrap()
-                .stdout
-        ).unwrap();
         let port = qlever_file.server.get("PORT").unwrap().as_str();
 
         let mut command = format!(
             "docker run -d --restart=unless-stopped \
-            -u {uid}:{gid} \
+            -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
             -v /data/{name}:/index \
             -p {port}:{port} \
