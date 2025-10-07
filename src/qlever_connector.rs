@@ -119,6 +119,7 @@ impl QLeverConnection {
     }
     
     fn start(qlever_file: &QleverFile) -> QLeverConnection {
+        // Missing run argument
         // docker run -d --restart=unless-stopped
         // -u $(id -u):$(id -g)
         // -v /etc/localtime:/etc/localtime:ro
@@ -342,18 +343,18 @@ struct JsonQueryExecTree {
     result_rows: usize,
 }
 
-fn command_assist(command: &str, args: &[&str], current_dir: &str) -> Result<(), Box<dyn Error>> {
-    let command = Command::new(command)
+fn command_assist(command_str: &str, args: &[&str], current_dir: &str) -> Result<(), Box<dyn Error>> {
+    let command = Command::new(command_str)
         .args(args)
         .current_dir(current_dir)
         .output()
-        .expect(("Failed executing command ".to_string() + command + " " + args.join(" ").as_str()).as_ref());
+        .expect(("Failed executing command ".to_string() + command_str + " " + args.join(" ").as_str()).as_ref());
     println!("status: {}", &command.status);
     println!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
     println!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
     if command.status.success() {
         Ok(())
     } else {
-        Err(format!("Command failed status code: {}", command.status).into())
+        Err(format!("Command failed status code: {0}\nCommand: {1} {2:?}", command.status, command_str, args).into())
     }
 }
