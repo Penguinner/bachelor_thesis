@@ -119,7 +119,6 @@ impl QLeverConnection {
     }
     
     fn start(qlever_file: &QleverFile) -> QLeverConnection {
-        // Missing run argument
         // docker run -d --restart=unless-stopped
         // -u $(id -u):$(id -g)
         // -v /etc/localtime:/etc/localtime:ro
@@ -169,7 +168,7 @@ impl QLeverConnection {
         if let Some(timeout) = qlever_file.server.get("TIMEOUT") {
             command += format!("-s {timeout}").as_str();
         }
-        command += format!("> /data/{name}.server-log.txt 2>&1'").as_str();
+        command += format!("> /data/{name}/{name}.server-log.txt 2>&1'").as_str();
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         QLeverConnection {
             qlever_file: qlever_file.clone(),
@@ -215,7 +214,8 @@ impl QLeverConnection {
     
     async fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
         let client = Client::new();
-        let response = client.post("http://localhost:".to_string() + self.qlever_file.server.get("PORT").unwrap().as_str())
+        let port = self.qlever_file.server.get("PORT").unwrap().as_str();
+        let response = client.post("http://localhost:".to_string() + port)
             .header("Accept", "application/qlever_results+json")
             .header("Content-Type", "application/sparql-query")
             .body(query.to_string())
