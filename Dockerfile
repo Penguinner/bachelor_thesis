@@ -30,10 +30,10 @@ RUN python3 -m venv /usr/qlever-venv && \
 
 # Copy needed files
 COPY --from=rust_builder /usr/local/cargo/bin/bachelor_thesis /usr/local/bin/bachelor_thesis
-COPY --from=rust_builder /usr/src/bachelor_thesis/src/data /data
+COPY --from=rust_builder /usr/src/bachelor_thesis/src/data /usr/src/bachelor_thesis
 
 ENV PATH="/usr/qlever-venv/bin:$PATH"
 ENV RUST_BACKTRACE=1
 
 #CMD ["bachelor_thesis", "-h"]
-CMD ["bachelor_thesis", "src/data/dblp.tsv", "dblp", "-p", "-r", "-a"]
+CMD ["bachelor_thesis", "dblp.tsv", "dblp", "-q", "-r", "-a"]
