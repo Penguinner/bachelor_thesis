@@ -181,7 +181,7 @@ impl QLeverConnection {
         while handle.block_on(conn.do_query_request(test_request)).is_err() {
             sleep(time::Duration::from_secs(5));
         }
-        
+
         conn
     }
     
@@ -229,10 +229,13 @@ impl QLeverConnection {
             .header("Content-Type", "application/sparql-query")
             .body(query.to_string())
             .send()
-            .await
-            .unwrap();
+            .await;
         
-        let result: JsonResult = response.json::<JsonResult>().await.expect("deserialize query result failed");
+        if let Err(e) = response {
+            return Err(e.into());
+        }
+        
+        let result: JsonResult = response.unwrap().json::<JsonResult>().await.expect("deserialize query result failed");
         
         let time: u128 = result.time.total.chars()
             .take_while(|c| c.is_ascii_digit())
