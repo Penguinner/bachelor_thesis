@@ -230,7 +230,7 @@ impl QLeverConnection {
             .body(query.to_string())
             .send()
             .await
-            .expect("qlever query failed");
+            .unwrap();
         
         let result: JsonResult = response.json::<JsonResult>().await.expect("deserialize query result failed");
         
