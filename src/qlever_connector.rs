@@ -151,7 +151,7 @@ impl QLeverConnection {
             command += " -m 5G";
         }
         if let Some(cache_max) = qlever_file.server.get("CACHE_MAX_SIZE") {
-            command += format!("-c {cache_max}").as_str();
+            command += format!(" -c {cache_max}").as_str();
         } else {
             command += " -c 5G";
         }
