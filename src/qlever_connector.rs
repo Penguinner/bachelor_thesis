@@ -1,16 +1,18 @@
 use std::collections::HashMap;
 use reqwest::Client;
 use serde::Deserialize;
-use std::fs;
+use std::{fs, time};
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
+use std::thread::sleep;
 use bollard::Docker;
 use glob::glob;
 use regex::{Captures, Regex};
 use serde_json::Value;
 use tokio::runtime::Runtime;
+use futures::executor::block_on;
 
 pub struct QLeverConnection {
     docker_id: String,
@@ -170,10 +172,16 @@ impl QLeverConnection {
         }
         command += format!(" > /index/{name}.server-log.txt 2>&1'").as_str();
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
-        QLeverConnection {
+        let mut conn = QLeverConnection {
             qlever_file: qlever_file.clone(),
             docker_id: format!("qlever.server.{name}")
+        };
+        let test_request = "SELECT * WHERE {?s ?p ?o} LIMIT 1";
+        while block_on(conn.do_query_request(test_request)).is_err() {
+            sleep(time::Duration::from_secs(5));
         }
+        
+        conn
     }
     
     pub fn stop(&self) -> Result<(), Box<dyn Error>> {
