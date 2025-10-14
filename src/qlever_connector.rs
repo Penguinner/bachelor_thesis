@@ -12,7 +12,6 @@ use glob::glob;
 use regex::{Captures, Regex};
 use serde_json::Value;
 use tokio::runtime::Runtime;
-use futures::executor::block_on;
 
 pub struct QLeverConnection {
     docker_id: String,
@@ -177,7 +176,9 @@ impl QLeverConnection {
             docker_id: format!("qlever.server.{name}")
         };
         let test_request = "SELECT * WHERE {?s ?p ?o} LIMIT 1";
-        while block_on(conn.do_query_request(test_request)).is_err() {
+        let rt = Runtime::new().unwrap();
+        let handle = rt.handle();
+        while handle.block_on(conn.do_query_request(test_request)).is_err() {
             sleep(time::Duration::from_secs(5));
         }
         
