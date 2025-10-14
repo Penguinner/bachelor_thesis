@@ -143,32 +143,32 @@ impl QLeverConnection {
             --name qlever.server.{name} \
             --init \
             --entrypoint bash \
-            docker.io/adfreiburg/qlever:latest -c 'ServerMain -i {name} -j 8 -p {port} "
+            docker.io/adfreiburg/qlever:latest -c 'ServerMain -i {name} -j 8 -p {port}"
         );
         if let Some(q_mem) = qlever_file.server.get("MEMORY_FOR_QUERIES") {
-            command += format!("-m {q_mem}").as_str();
+            command += format!(" -m {q_mem}").as_str();
         } else {
-            command += "-m 5G";
+            command += " -m 5G";
         }
         if let Some(cache_max) = qlever_file.server.get("CACHE_MAX_SIZE") {
             command += format!("-c {cache_max}").as_str();
         } else {
-            command += "-c 5G";
+            command += " -c 5G";
         }
         if let Some(entry_max) = qlever_file.server.get("CACHE_MAX_SIZE_SINGLE_ENTRY") {
-            command += format!("-e {entry_max}").as_str();
+            command += format!(" -e {entry_max}").as_str();
         } else {
-            command += "-e 1G";
+            command += " -e 1G";
         }
         if let Some(entry_count) = qlever_file.server.get("CACHE_MAX_NUM_ENTRIES") {
-            command += format!("-k {entry_count}").as_str();
+            command += format!(" -k {entry_count}").as_str();
         } else {
-            command += "-k 200";
+            command += " -k 200";
         }
         if let Some(timeout) = qlever_file.server.get("TIMEOUT") {
-            command += format!("-s {timeout}").as_str();
+            command += format!(" -s {timeout}").as_str();
         }
-        command += format!("> /index/{name}.server-log.txt 2>&1'").as_str();
+        command += format!(" > /index/{name}.server-log.txt 2>&1'").as_str();
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         QLeverConnection {
             qlever_file: qlever_file.clone(),
