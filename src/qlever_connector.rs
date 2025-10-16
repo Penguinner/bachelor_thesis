@@ -5,7 +5,6 @@ use std::fs;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-use std::net::IpAddr;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
@@ -240,11 +239,10 @@ impl QLeverConnection {
         let client = reqwest::blocking::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy()
-            .local_address(IpAddr::from([127, 0, 0, 1]))
             .build()
             .unwrap();
         let query = query.to_string();
-        let res = client.post(format!("http://localhost:{port}/"))
+        let res = client.post(format!("host.docker.internal:{port}/"))
             .headers(headers)
             .body(query)
             .send();
