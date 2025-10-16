@@ -238,6 +238,7 @@ impl QLeverConnection {
 
         let client = reqwest::blocking::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .no_proxy()
             .build()
             .unwrap();
         let query = query.to_string();
