@@ -1,11 +1,13 @@
 use std::collections::HashMap;
-use reqwest::{header, Client};
+use reqwest::header;
 use serde::Deserialize;
-use std::{fs, time};
+use std::fs;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
+use std::thread::sleep;
+use std::time::Duration;
 use bollard::Docker;
 use glob::glob;
 use regex::{Captures, Regex};
@@ -174,25 +176,22 @@ impl QLeverConnection {
             qlever_file: qlever_file.clone(),
             docker_id: format!("qlever.server.{name}")
         };
+        // Test connection
         let test_request = "SELECT * WHERE {?s ?p ?o} LIMIT 1";
-        let rt = Runtime::new().unwrap();
-        let handle = rt.handle();
-        handle.block_on( async {
-            let mut times = 0;
-            while times < 12 {
-                let result = conn.do_query_request(test_request).await;
-                match result {
-                    Ok(_) => {
-                        break;
-                    }
-                    Err(_) => {
-                        times += 1;
-                        tokio::time::sleep(time::Duration::from_secs(5)).await;
-                    }
+        let mut times = 0;
+        while times < 12 {
+            let result = conn.do_query_request(test_request);
+            match result {
+                Ok(_) => {
+                    break;
+                }
+                Err(e) => {
+                    times += 1;
+                    print!("{}", e);
+                    sleep(Duration::from_secs(2))
                 }
             }
         }
-        );
 
         conn
     }
@@ -217,10 +216,8 @@ impl QLeverConnection {
     }
 
     pub fn run_test_query(&mut self, query: &str, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
-        let rt = Runtime::new()?;
-        let handle = rt.handle();
 
-        let result: (u128, usize, usize) = handle.block_on(self.do_query_request(query)).expect("query failed");
+        let result: (u128, usize, usize) = self.do_query_request(query).expect("query failed");
         if result.1 != rows || result.2 != columns {
             return Err(format!(
                 "Result doesn't match expected size:\n Expected: Rows {0}, Columns {1}\n Got: Rows {2} Columns {3}",
@@ -233,23 +230,27 @@ impl QLeverConnection {
         Ok(result.0)
     }
     
-    async fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
-        let client = Client::new();
+    fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
         let port = self.qlever_file.server.get("PORT").unwrap().as_str();
         let mut headers = header::HeaderMap::new();
         headers.insert("Accept", "application/qlever-results+json".parse().unwrap());
         headers.insert("Content-type", "application/sparql-query".parse().unwrap());
-        let response = client.post(format!("http://localhost:{port}/"))
+
+        let client = reqwest::blocking::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap();
+        let query = query.to_string();
+        let res = client.post(format!("http://localhost:{port}/"))
             .headers(headers)
-            .body(query.to_string())
-            .send()
-            .await;
+            .body(query)
+            .send();
         
-        if let Err(e) = response {
+        if let Err(e) = res {
             return Err(e.into());
         }
         
-        let result: JsonResult = response.unwrap().json::<JsonResult>().await.expect("deserialize query result failed");
+        let result: JsonResult = res.unwrap().json::<JsonResult>().expect("deserialize query result failed");
         
         let time: u128 = result.time.total.chars()
             .take_while(|c| c.is_ascii_digit())
