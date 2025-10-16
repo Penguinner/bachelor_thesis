@@ -177,7 +177,7 @@ impl QLeverConnection {
         let test_request = "SELECT * WHERE {?s ?p ?o} LIMIT 1";
         let rt = Runtime::new().unwrap();
         let handle = rt.handle();
-        handle.block_on( async { 
+        handle.block_on( async {
             loop {
                 let result = conn.do_query_request(test_request).await;
                 match result {
@@ -236,7 +236,7 @@ impl QLeverConnection {
         let client = Client::new();
         let port = self.qlever_file.server.get("PORT").unwrap().as_str();
         let response = client.post("http://localhost:".to_string() + port)
-            .header("Accept", "application/qlever_results+json")
+            .header("Accept", "application/qlever-results+json")
             .header("Content-Type", "application/sparql-query")
             .body(query.to_string())
             .send()
