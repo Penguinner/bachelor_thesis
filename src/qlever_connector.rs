@@ -6,7 +6,6 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
-use std::thread::sleep;
 use bollard::Docker;
 use glob::glob;
 use regex::{Captures, Regex};
@@ -178,9 +177,21 @@ impl QLeverConnection {
         let test_request = "SELECT * WHERE {?s ?p ?o} LIMIT 1";
         let rt = Runtime::new().unwrap();
         let handle = rt.handle();
-        while handle.block_on(conn.do_query_request(test_request)).is_err() {
-            sleep(time::Duration::from_secs(5));
+        handle.block_on( async { 
+            loop {
+                let result = conn.do_query_request(test_request).await;
+                match result {
+                    Ok(_) => {
+                        break;
+                    }
+                    Err(e) => {
+                        print!("{}", e);
+                        tokio::time::sleep(time::Duration::from_secs(5)).await;
+                    }
+                }
+            }
         }
+        );
 
         conn
     }
