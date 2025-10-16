@@ -242,7 +242,7 @@ impl QLeverConnection {
             .build()
             .unwrap();
         let query = query.to_string();
-        let res = client.post(format!("host.docker.internal:{port}/"))
+        let res = client.post(format!("http://127.0.0.1:{port}/"))
             .headers(headers)
             .body(query)
             .send();
