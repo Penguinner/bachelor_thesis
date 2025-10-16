@@ -178,14 +178,15 @@ impl QLeverConnection {
         let rt = Runtime::new().unwrap();
         let handle = rt.handle();
         handle.block_on( async {
-            loop {
+            let mut times = 0;
+            while times < 12 {
                 let result = conn.do_query_request(test_request).await;
                 match result {
                     Ok(_) => {
                         break;
                     }
-                    Err(e) => {
-                        print!("{}", e);
+                    Err(_) => {
+                        times += 1;
                         tokio::time::sleep(time::Duration::from_secs(5)).await;
                     }
                 }
