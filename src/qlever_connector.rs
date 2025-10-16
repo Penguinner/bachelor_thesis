@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use reqwest::Client;
+use reqwest::{header, Client};
 use serde::Deserialize;
 use std::{fs, time};
 use std::error::Error;
@@ -236,9 +236,11 @@ impl QLeverConnection {
     async fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
         let client = Client::new();
         let port = self.qlever_file.server.get("PORT").unwrap().as_str();
-        let response = client.post("http://localhost:".to_string() + port)
-            .header("Accept", "application/qlever-results+json")
-            .header("Content-Type", "application/sparql-query")
+        let mut headers = header::HeaderMap::new();
+        headers.insert("Accept", "application/qlever-results+json".parse().unwrap());
+        headers.insert("Content-type", "application/sparql-query".parse().unwrap());
+        let response = client.post(format!("http://localhost:{port}/"))
+            .headers(headers)
             .body(query.to_string())
             .send()
             .await;
