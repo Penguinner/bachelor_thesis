@@ -244,14 +244,12 @@ impl Connection {
 pub struct TestResult {
     id: usize,
     results: Vec<u128>,
-    failures: usize,
 }
 
 impl TestResult {
     pub fn to_tsv_record(&self) -> Vec<String> {
         let mut results: Vec<String> = Vec::new();
         results.push(self.id.to_string());
-        results.push(self.failures.to_string());
         results.append(&mut self.results.iter().map(|x| x.to_string()).collect());
         results
     }
@@ -259,7 +257,6 @@ impl TestResult {
 
 fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
-    let mut failures: Vec<usize> = vec![0; queries.len()];
     let mut results: Vec<Vec<u128>> = Vec::new();
     for _ in 0 .. iterations {
         clear_cache().expect("Failed to clear cache");
@@ -270,7 +267,7 @@ fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -
         }
     }
    let results =  results.iter().enumerate().map(|(index, value) | {
-        TestResult {id: index, results: value.clone(), failures: failures[index].clone() }
+        TestResult {id: index, results: value.clone()}
     }).collect();
     
     Ok(results)
@@ -291,7 +288,7 @@ fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<
         .has_headers(true)
         .from_writer(File::create(filename.as_str())?);
 
-    writer.write_record(&["id", "failures", "values..."])?;
+    writer.write_record(&["id", "values..."])?;
 
     for result in results {
         writer.write_record(result.to_tsv_record())?;
