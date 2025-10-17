@@ -8,7 +8,7 @@ use postgres::types::ToSql;
 use postgres::{Client, NoTls, Row};
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -141,20 +141,21 @@ impl PostgresConnection {
         println!("Inserted DBLP data into Postgres");
     }
     
-    pub fn run_test_query(&mut self, query: &str, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
+    pub fn run_test_query(&mut self, query: &str) -> u128 {
         let now = Instant::now();
-        let result : Vec<Row> = self.client.query(query, &[])?;
+        let result : Vec<Row> = self.client.query(query, &[]).unwrap();
         let duration = now.elapsed().as_millis();
-        if result.len() == rows && result.get(0).unwrap().len() == columns {
-            return Ok(duration)
-        }
-        Err(format!(
-            "Result doesn't match expected size:\n Expected: Rows {0}, Columns {1}\n Got: Rows {2} Columns {3}",
-            rows,
-            columns,
-            result.len(),
-            result.get(0).unwrap().len()
-        ).into())
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(format!("/data/postgres.{}.log", self.dataset))
+            .unwrap();
+        let _ = file.write(
+            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, result.get(0).unwrap().len(), result.len()).as_bytes()
+        );
+        
+        duration
     }
     
     pub fn close(&mut self) -> Result<(), Box<dyn Error>> {

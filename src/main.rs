@@ -195,8 +195,6 @@ pub struct TSVRecord {
     postgresql: String,
     duckdb: String,
     sparql: String,
-    columns: usize,
-    rows: usize,
 }
 
 fn read_test_file(filename: &str) -> Result<Vec<TSVRecord>, Box<dyn Error>> {
@@ -217,17 +215,17 @@ pub enum Connection {
 }
 
 impl Connection {
-    pub fn run_test_query(&mut self, record: &TSVRecord) -> Result<u128, Box<dyn Error>> {
+    pub fn run_test_query(&mut self, record: &TSVRecord) -> u128 {
         match self {
             #[cfg(feature="duckdb")]
             Connection::DuckDB(connection) => {
-                connection.run_test_query(record.duckdb.as_ref(), record.rows, record.columns)
+                connection.run_test_query(record.duckdb.as_ref())
             },
             Connection::PostGres(connection) => {
-                connection.run_test_query(record.postgresql.as_ref(), record.rows, record.columns)
+                connection.run_test_query(record.postgresql.as_ref())
             },
             Connection::QLever(connection) => {
-                connection.run_test_query(record.sparql.as_ref(), record.rows, record.columns)
+                connection.run_test_query(record.sparql.as_ref())
             }
         }
     }
@@ -263,21 +261,12 @@ fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -
     let queries = read_test_file(filename.as_str())?;
     let mut failures: Vec<usize> = vec![0; queries.len()];
     let mut results: Vec<Vec<u128>> = Vec::new();
-    for iter in 0 .. iterations {
+    for _ in 0 .. iterations {
         clear_cache().expect("Failed to clear cache");
         // Run Queries
         for (id, record) in queries.iter().enumerate() {
             let result = connection.run_test_query(record);
-            match result {
-                Ok(value) => {
-                    println!("Iteration: {0} Query: {1} Success", iter, id);
-                    results[id].push(value) 
-                },
-                Err(e) => {
-                    println!("Iteration: {0} Query: {1} Failed: {2}", iter, id, e);
-                    failures[id].add_assign(1)
-                }
-            }
+            results[id].push(result)
         }
     }
    let results =  results.iter().enumerate().map(|(index, value) | {

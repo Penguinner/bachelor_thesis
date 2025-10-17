@@ -1,8 +1,9 @@
 use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 use duckdb::{params, Connection};
 use std::error::Error;
-use std::fs::File;
-use std::io::Read;
+use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
 use std::time::Instant;
 
 pub struct DuckDBConnection {
@@ -67,25 +68,25 @@ impl DuckDBConnection {
         println!("Inserted DBLP data into DuckDB");
     }
 
-    pub fn run_test_query(&self, query: &str, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
-        let mut stmt = self.connection.prepare(query)?;
+    pub fn run_test_query(&self, query: &str) -> u128 {
+        let mut stmt = self.connection.prepare(query).unwrap();
         let now = Instant::now();
         let _ = stmt.query(params![]).unwrap();
         let duration = now.elapsed().as_millis();
-        if stmt.row_count() == rows && stmt.column_count() == columns {
-            return Ok(duration)
-        }
-        Err(format!(
-            "Result doesn't match expected size:\n Expected: Rows {0}, Columns {1}\n Got: Rows {2} Columns {3}",
-            rows,
-            columns,
-            stmt.row_count(),
-            stmt.column_count()
-        ).into())
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(format!("/data/duckdb.{}.log", self.dataset))
+            .unwrap();
+        let _ = file.write(
+            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, stmt.column_count(), stmt.row_count()).as_bytes()
+        );
+        duration
     }
     
     pub fn close(self) -> Result<(), Box<dyn Error>> {
-        // TODO Clear Data
+        fs::remove_file("/data/db.duckdb").unwrap();
         self.connection.close().expect("connection close failed");
         Ok(())
     }

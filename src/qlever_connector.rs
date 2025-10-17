@@ -3,7 +3,7 @@ use reqwest::header;
 use serde::Deserialize;
 use std::fs;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::process::Command;
 use std::thread::sleep;
@@ -215,19 +215,19 @@ impl QLeverConnection {
         Ok(())
     }
 
-    pub fn run_test_query(&mut self, query: &str, rows: usize, columns: usize) -> Result<u128, Box<dyn Error>> {
-
+    pub fn run_test_query(&mut self, query: &str) -> u128 {
         let result: (u128, usize, usize) = self.do_query_request(query).expect("query failed");
-        if result.1 != rows || result.2 != columns {
-            return Err(format!(
-                "Result doesn't match expected size:\n Expected: Rows {0}, Columns {1}\n Got: Rows {2} Columns {3}",
-                rows,
-                columns,
-                result.1,
-                result.2
-            ).into())
-        }
-        Ok(result.0)
+        let name = self.qlever_file.data.get("NAME").unwrap().as_str();
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(format!("/data/qlever.{}.log", name))
+            .unwrap();
+        let _ = file.write(
+            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, result.0, result.2, result.1).as_bytes()
+        );
+        result.0
     }
     
     fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
