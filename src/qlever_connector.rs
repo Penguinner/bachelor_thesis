@@ -37,19 +37,35 @@ impl QLeverConnection {
     }
     
     fn setup_config(dataset: &String) -> QleverFile {
-
-        let target = match dataset.as_str() {
-            "dblp" => Some("https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp"),
-            "osm-country" => Some("https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-country"),
-            _ => None,
+        let dataset_parts: Vec<&str> = dataset.split(" ").collect();
+        let target = match dataset_parts[0] {
+            "dblp" => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp",
+            "osm-country" => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-country",
+            _ => panic!("Invalid dataset"),
         };
-        
-        if let Some(target) = target {
-            let response = reqwest::blocking::get(target).unwrap();
-            let content = response.text().unwrap();
-            return toml::from_str::<QleverFile>(&Self::sanitize_toml(content)).unwrap();
+        let response = reqwest::blocking::get(target).unwrap();
+        let content = response.text().unwrap();
+        content = &Self::extra_args(dataset_parts, content);
+        let sanitizied = &Self::sanitize_toml(content);
+        return toml::from_str::<QleverFile>(sanitizied).unwrap();
+    }
+
+    fn extra_args(dataset_parts: Vec<&str>, content: String) -> String {
+        if len(dataset_parts) == 1 {
+            return content
         }
-        panic!("Missing config")
+        match dataset_parts[0] {
+            "osm-country" => {
+                let continent = dataset_parts[1];
+                let country = dataset_parts[2];
+                let continent_regex = Regex::new(r"CONTINENT\s*=\s(europe)").unwrap();
+                let country_regex = Regex::new(r"COUNTRY\s*=\s(switzerland)").unwrap();
+                let new_content = continent_regex.replace(content.as_str(), continent);
+                new_content = country_regex.replace(new_content, country);
+                return new_content.to_string()
+            }
+            _ => unimplemented!()
+        }
     }
 
     fn sanitize_toml(string: String) -> String {
