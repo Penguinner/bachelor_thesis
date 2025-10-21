@@ -50,8 +50,8 @@ impl QLeverConnection {
         return toml::from_str::<QleverFile>(sanitizied).unwrap();
     }
 
-    fn extra_args(dataset_parts: Vec<&str>, content: String) -> String {
-        if len(dataset_parts) == 1 {
+    fn extra_args(dataset_parts: Vec<&str>, content: &String) -> String {
+        if dataset_parts.len() == 1 {
             return content
         }
         match dataset_parts[0] {
@@ -60,7 +60,7 @@ impl QLeverConnection {
                 let country = dataset_parts[2];
                 let continent_regex = Regex::new(r"CONTINENT\s*=\s(europe)").unwrap();
                 let country_regex = Regex::new(r"COUNTRY\s*=\s(switzerland)").unwrap();
-                let new_content = continent_regex.replace(content.as_str(), continent);
+                let new_content = continent_regex.replace(content.as_str(), continent).to_string();
                 new_content = country_regex.replace(new_content, country);
                 return new_content.to_string()
             }
