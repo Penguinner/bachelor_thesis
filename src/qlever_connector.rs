@@ -60,7 +60,7 @@ impl QLeverConnection {
                 let country = dataset_parts[2];
                 let continent_regex = Regex::new(r"CONTINENT\s*=\s(europe)").unwrap();
                 let country_regex = Regex::new(r"COUNTRY\s*=\s(switzerland)").unwrap();
-                let new_content = continent_regex.replace(content.as_str(), continent).to_string();
+                let mut new_content = continent_regex.replace(content.as_str(), continent).to_string();
                 new_content = country_regex.replace(new_content.as_str(), country).to_string();
                 return new_content
             }

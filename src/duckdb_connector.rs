@@ -43,7 +43,7 @@ impl DuckDBConnection {
         let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
         let response = reqwest::blocking::get(url).unwrap();
         let file_path = format!("/data/{country}-latest.osm.pbf");
-        let file = File::create(&file_path).unwrap();
+        let mut file = File::create(&file_path).unwrap();
         file.write_all(&response.bytes().unwrap()).unwrap();
         let query = format!("CREATE TABLE osm AS SELECT * FROM ST_ReadOSM({file_path})");
         self.connection.execute(&query, []).unwrap();
