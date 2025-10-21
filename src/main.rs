@@ -257,7 +257,7 @@ impl TestResult {
 
 fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
-    let mut results: Vec<Vec<u128>> = Vec::new();
+    let mut results: Vec<Vec<u128>> = vec![Vec::new(); queries.len()];
     for _ in 0 .. iterations {
         clear_cache().expect("Failed to clear cache");
         // Run Queries
