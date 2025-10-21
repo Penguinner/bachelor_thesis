@@ -45,14 +45,14 @@ impl QLeverConnection {
         };
         let response = reqwest::blocking::get(target).unwrap();
         let content = response.text().unwrap();
-        content = &Self::extra_args(dataset_parts, content);
+        content = Self::extra_args(dataset_parts, &content);
         let sanitizied = &Self::sanitize_toml(content);
         return toml::from_str::<QleverFile>(sanitizied).unwrap();
     }
 
     fn extra_args(dataset_parts: Vec<&str>, content: &String) -> String {
         if dataset_parts.len() == 1 {
-            return content
+            return content.to_string()
         }
         match dataset_parts[0] {
             "osm-country" => {
@@ -61,8 +61,8 @@ impl QLeverConnection {
                 let continent_regex = Regex::new(r"CONTINENT\s*=\s(europe)").unwrap();
                 let country_regex = Regex::new(r"COUNTRY\s*=\s(switzerland)").unwrap();
                 let new_content = continent_regex.replace(content.as_str(), continent).to_string();
-                new_content = country_regex.replace(new_content, country);
-                return new_content.to_string()
+                new_content = country_regex.replace(new_content, country).to_string();
+                return new_content
             }
             _ => unimplemented!()
         }
