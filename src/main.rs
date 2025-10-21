@@ -118,7 +118,7 @@ fn main() {
     }
     
     // TODO add more datasets
-    match data_set.split().collect()[0].as_ref() {
+    match data_set.split(" ").collect()[0].as_ref() {
             "dblp" if tests.iter().any(|x| { x.name() == "duckdb" || x.name() == "postgres"}) => {
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();

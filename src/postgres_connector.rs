@@ -91,7 +91,7 @@ impl PostgresConnection {
         let client = create_client();
         let mut conn = PostgresConnection { client, dataset: dataset.into(), docker_id: id};
         // TODO add more datasets
-        match dataset.split().collect()[0].as_str() {
+        match dataset.split(" ").collect()[0].as_str() {
             "dblp" => {
                 conn.create_tables_dblp();
                 conn.insert_dblp_data();
@@ -111,7 +111,7 @@ impl PostgresConnection {
         let country = dataset_parts[2];
         let file_path = format!("/data/{country}-latest.osm.pbf");
         let osm2pgsql = Command::new("bash")
-        .args(["-c", format!("osm2pgsql -c -d database -U postgres -W password -H 172.17.0.1 -P 5432 {file_path}")])
+        .args(["-c", format!("osm2pgsql -c -d database -U postgres -W password -H 172.17.0.1 -P 5432 {file_path}").to_str()])
         .output()
         .unwrap();
     }
