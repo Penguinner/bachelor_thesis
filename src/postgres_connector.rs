@@ -92,7 +92,7 @@ impl PostgresConnection {
         let client = create_client();
         let mut conn = PostgresConnection { client, dataset: dataset.into(), docker_id: id};
         // TODO add more datasets
-        match dataset.split(" ").collect::<Vec<&str>>()[0].as_str() {
+        match dataset.split(" ").collect::<Vec<&str>>()[0] {
             "dblp" => {
                 conn.create_tables_dblp();
                 conn.insert_dblp_data();
