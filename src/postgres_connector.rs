@@ -31,7 +31,7 @@ impl PostgresConnection {
             let docker = Docker::connect_with_defaults().unwrap();
             let mut image = "postgres:latest";
 
-            if datase.contains("osm") {
+            if dataset.contains("osm") {
                 image = "postgis/postgis:18-3.6";
             }
 

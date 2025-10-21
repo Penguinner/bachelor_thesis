@@ -37,7 +37,7 @@ impl DuckDBConnection {
     }
 
     fn load_osm_country_data(&mut self) {
-        let dataset_parts: Vec<&str> = self.data_set.split(" ").collect();
+        let dataset_parts: Vec<&str> = self.dataset.split(" ").collect();
         let continent = dataset_parts[1];
         let country = dataset_parts[2];
         let file_path = format!("/data/{country}-latest.osm.pbf");
