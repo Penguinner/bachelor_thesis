@@ -13,17 +13,40 @@ pub struct DuckDBConnection {
 
 impl DuckDBConnection {
     pub fn new(dataset: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
+        let dataset_parts: Vec<&str> = dataset.split(" ").collect();
         let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset .to_string() };
         // TODO Add more datasets
-        match dataset.as_str() {
+        match dataset_parts[0] {
             "dblp" => {
                 conn.create_tables_dblp();
                 conn.insert_dblp_data();
             },
+            "osm-country" => {
+                conn.load_spatial_module();
+                conn.load_osm_country_data();
+            }
             _ => { return Err("dataset could not be resolved for duckdb Connection".into())}
         }
 
         Ok(conn)
+    }
+
+    fn load_spatial_module(&mut self) {
+        self.connection.execute("INSTALL spatial;", []).unwrap();
+        self.connection.execute("LOAD spatial;", []).unwrap();
+    }
+
+    fn load_osm_country_data(&mut self) {
+        let dataset_parts: Vec<&str> = self.dataset.split(" ").collect();
+        let continent = dataset_parts[1];
+        let country = dataset_parts[2];
+        let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
+        let response = reqwest::blocking::get(url).unwrap();
+        let file_path = format!("/data/{country}-latest.osm.pbf");
+        let file = File::create(&file_path).unwrap();
+        file.write_all(response.bytes().unwrap()).unwrap();
+        let query = format!("CREATE TABLE osm AS SELECT * FROM ST_ReadOSM({file_path})");
+        self.connection.execute(&query, []).unwrap();
     }
 
     pub fn create_tables_dblp(&mut self) {
