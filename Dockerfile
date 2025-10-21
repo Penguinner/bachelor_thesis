@@ -19,8 +19,9 @@ RUN apt-get update && \
     python3-venv \
     libssl3 \
     curl \
-    ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    osm2pgsql \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://get.docker.com | sh
 

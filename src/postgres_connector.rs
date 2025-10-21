@@ -28,6 +28,11 @@ impl PostgresConnection {
         let handle = rt.handle();
         let id = handle.block_on(async {
             let docker = Docker::connect_with_defaults().unwrap();
+            let mut image = "postgres:latest";
+
+            if datase.contains("osm") {
+                image = "postgis/postgis:18-3.6";
+            }
 
             docker.create_image(
                 Some(
@@ -51,7 +56,7 @@ impl PostgresConnection {
             );
 
             let config = ContainerCreateBody {
-                image: Some("postgres:latest".into()),
+                image: Some(image.into()),
                 env: Some(vec![
                     "POSTGRES_PASSWORD=password".to_string(),
                     "POSTGRES_USER=postgres".to_string(),
@@ -86,15 +91,29 @@ impl PostgresConnection {
         let client = create_client();
         let mut conn = PostgresConnection { client, dataset: dataset.into(), docker_id: id};
         // TODO add more datasets
-        match dataset.as_str() {
+        match dataset.split().collect()[0].as_str() {
             "dblp" => {
                 conn.create_tables_dblp();
                 conn.insert_dblp_data();
             },
+            "osm-country" => {
+                conn.client.execute("CREATE EXTENSION postgis;", &[]);
+                conn.insert_osm_data();
+            }
             _ => { return Err("dataset could not be resolved for postgres Connection".into())}
         }
 
         Ok(conn)
+    }
+
+    fn insert_osm_data(&self) {
+        let dataset_parts: Vec<&str> = self.dataset.split(" ").collect();
+        let country = dataset_parts[2];
+        let file_path = format!("/data/{country}-latest.osm.pbf");
+        let osm2pgsql = Command::new("bash")
+        .args(["-c", format!("osm2pgsql -c -d database -U postgres -W password -H 172.17.0.1 -P 5432 {file_path}")])
+        .output()
+        .unwrap();
     }
 
     pub fn create_tables_dblp(&mut self) {
