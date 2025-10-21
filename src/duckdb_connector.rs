@@ -13,7 +13,7 @@ pub struct DuckDBConnection {
 
 impl DuckDBConnection {
     pub fn new(dataset: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
-        let mut conn = DuckDBConnection { connection: Connection::open("/data/db.duckdb").unwrap(), dataset: dataset .to_string() };
+        let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset .to_string() };
         // TODO Add more datasets
         match dataset.as_str() {
             "dblp" => {
@@ -27,7 +27,7 @@ impl DuckDBConnection {
     }
 
     pub fn create_tables_dblp(&mut self) {
-        let mut file = File::open("/data/create_tables_dblp.sql").unwrap();
+        let mut file = File::open("create_tables_dblp.sql").unwrap();
         let mut query = String::new();
         file.read_to_string(&mut query).unwrap();
         query = format!("BEGIN;\n {}\n COMMIT;", query);
@@ -86,7 +86,7 @@ impl DuckDBConnection {
     }
     
     pub fn close(self) -> Result<(), Box<dyn Error>> {
-        fs::remove_file("/data/db.duckdb").unwrap();
+        fs::remove_file("db.duckdb").unwrap();
         self.connection.close().expect("connection close failed");
         Ok(())
     }
