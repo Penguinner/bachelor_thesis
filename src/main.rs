@@ -118,7 +118,7 @@ fn main() {
     }
     
     // TODO add more datasets
-    match data_set.split(" ").collect()[0].as_ref() {
+    match data_set.split(" ").collect::<Vec<&str>>()[0].as_ref() {
             "dblp" if tests.iter().any(|x| { x.name() == "duckdb" || x.name() == "postgres"}) => {
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
@@ -128,8 +128,8 @@ fn main() {
                 parser.run();
                 println!("Finished Parsing DBLP data");
             },
-            "osm_country" if test.iter().any(|x| {x.name() == "duckdb" || x.name() == "postgres"}) => {
-                let dataset_parts: Vec<&str> = self.data_set.split(" ").collect();
+            "osm_country" if tests.iter().any(|x| {x.name() == "duckdb" || x.name() == "postgres"}) => {
+                let dataset_parts: Vec<&str> = data_set.split(" ").collect();
                 let continent = dataset_parts[1];
                 let country = dataset_parts[2];
                 let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
