@@ -1,16 +1,16 @@
-#[cfg(feature="duckdb")]
+#[cfg(feature = "duckdb")]
 use crate::duckdb_connector::DuckDBConnection;
 use crate::parser::Parser;
 use crate::postgres_connector::PostgresConnection;
 use crate::qlever_connector::QLeverConnection;
 use async_compression::tokio::bufread::GzipDecoder;
-use clap::{command, value_parser, Arg, ArgAction};
+use clap::{Arg, ArgAction, command, value_parser};
 use csv::ReaderBuilder;
 use futures::TryStreamExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::ops::AddAssign;
 use std::process::Command;
@@ -18,9 +18,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
 
-mod parser;
 #[cfg(feature = "duckdb")]
 mod duckdb_connector;
+mod parser;
 mod postgres_connector;
 mod qlever_connector;
 
@@ -44,13 +44,13 @@ fn main() {
             Arg::new("query_file")
                 .value_parser(value_parser!(String))
                 .help("path to a query file with the tsv format: (name sql sparql columns rows)")
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::new("data_set")
-                .value_parser(["dblp"])
+                .value_parser(value_parser!(String))
                 .help("dataset to use for this test run")
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::new("iter")
@@ -59,7 +59,7 @@ fn main() {
                 .value_parser(value_parser!(usize))
                 .default_value("1")
                 .help("how often queries are repeated")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("aggregate")
@@ -67,7 +67,7 @@ fn main() {
                 .long("aggregate")
                 .action(ArgAction::SetTrue)
                 .help("save aggregated results to tsv file")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("raw")
@@ -75,36 +75,39 @@ fn main() {
                 .long("raw")
                 .action(ArgAction::SetTrue)
                 .help("save raw results to tsv file")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("qlever")
                 .short('q')
                 .long("qlever")
                 .action(ArgAction::SetTrue)
-                .required(false)
-            )
+                .required(false),
+        )
         .arg(
             Arg::new("postgres")
                 .short('p')
                 .long("postgres")
                 .action(ArgAction::SetTrue)
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("duckdb")
                 .short('d')
                 .long("duckdb")
                 .action(ArgAction::SetTrue)
-                .required(false)
+                .required(false),
         )
         .get_matches();
-    
-    let queries = matches.get_one::<String>("query_file").expect("No 'query_file' argument");
-    let data_set = matches.get_one::<String>("data_set")
+
+    let queries = matches
+        .get_one::<String>("query_file")
+        .expect("No 'query_file' argument");
+    let data_set = matches
+        .get_one::<String>("data_set")
         .expect("data_set is required");
     let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
-    
+
     let mut tests: Vec<Database> = Vec::new();
     if matches.get_flag("qlever") {
         tests.push(Database::QLever);
@@ -112,39 +115,48 @@ fn main() {
     if matches.get_flag("postgres") {
         tests.push(Database::Postgres);
     }
-    #[cfg(feature="duckdb")]
+    #[cfg(feature = "duckdb")]
     if matches.get_flag("duckdb") {
         tests.push(Database::DuckDB);
     }
     
     // TODO add more datasets
     match data_set.split(" ").collect::<Vec<&str>>()[0].as_ref() {
-            "dblp" if tests.iter().any(|x| { x.name() == "duckdb" || x.name() == "postgres"}) => {
-                let rt = Runtime::new().unwrap();
-                let handle = rt.handle();
-                
-                let _ = handle.block_on(download_dblp_data("/data/dblp.xml".into()));
-                let mut parser = Parser::new("/data/dblp.xml");
-                parser.run();
-                println!("Finished Parsing DBLP data");
-            },
-            "osm_country" if tests.iter().any(|x| {x.name() == "duckdb" || x.name() == "postgres"}) => {
-                let dataset_parts: Vec<&str> = data_set.split(" ").collect();
-                let continent = dataset_parts[1];
-                let country = dataset_parts[2];
-                let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
-                let response = reqwest::blocking::get(url).unwrap();
-                let file_path = format!("/data/{country}-latest.osm.pbf");
-                let mut file = File::create(&file_path).unwrap();
-                file.write_all(&response.bytes().unwrap()).unwrap();
-            }
-            _ => (),
-        };
+        "dblp"
+            if tests
+                .iter()
+                .any(|x| x.name() == "duckdb" || x.name() == "postgres") =>
+        {
+            let rt = Runtime::new().unwrap();
+            let handle = rt.handle();
+
+            let _ = handle.block_on(download_dblp_data("/data/dblp.xml".into()));
+            let mut parser = Parser::new("/data/dblp.xml");
+            parser.run();
+            println!("Finished Parsing DBLP data");
+        }
+        "osm_country"
+            if tests
+                .iter()
+                .any(|x| x.name() == "duckdb" || x.name() == "postgres") =>
+        {
+            let dataset_parts: Vec<&str> = data_set.split(" ").collect();
+            let continent = dataset_parts[1];
+            let country = dataset_parts[2];
+            let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
+            let response = reqwest::blocking::get(url).unwrap();
+            let file_path = format!("/data/{country}-latest.osm.pbf");
+            let mut file = File::create(&file_path).unwrap();
+            file.write_all(&response.bytes().unwrap()).unwrap();
+        }
+        _ => (),
+    };
     // Run Tests
     for test in tests {
         println!("Start of Test: {}", test.name());
         // Create Connection and insert Data
-        let mut conn = test.to_connection(&data_set.to_string())
+        let mut conn = test
+            .to_connection(&data_set.to_string())
             .expect(format!("Failed to create connection for {}", test.name()).as_str());
         // Run Queries
         let results = run_test(queries, iter, &mut conn)
@@ -152,15 +164,30 @@ fn main() {
         // Save Results
         let _ = create_dir_all("/extern/results");
         if matches.get_flag("raw") {
-            write_results(&results, format!("/extern/results/{}.raw.tsv", test.name()))
-                .expect(format!("Failed while writing raw results of {} to file", test.name()).as_str());
+            write_results(&results, format!("/extern/results/{}.raw.tsv", test.name())).expect(
+                format!(
+                    "Failed while writing raw results of {} to file",
+                    test.name()
+                )
+                .as_str(),
+            );
         }
         if matches.get_flag("aggregate") {
-            write_results_aggregated(&results, format!("/extern/results/{}.aggregate.tsv", test.name()))
-                .expect(format!("Failed while writing aggregate results of {} to file", test.name()).as_str());
+            write_results_aggregated(
+                &results,
+                format!("/extern/results/{}.aggregate.tsv", test.name()),
+            )
+            .expect(
+                format!(
+                    "Failed while writing aggregate results of {} to file",
+                    test.name()
+                )
+                .as_str(),
+            );
         }
         // Clean Up
-        conn.close().expect(format!("Failed to close connection for {}", test.name()).as_str());
+        conn.close()
+            .expect(format!("Failed to close connection for {}", test.name()).as_str());
         clear_cache().expect("Failed to clear cache");
         println!("End of Test: {}", test.name());
     }
@@ -169,7 +196,7 @@ fn main() {
 
 enum Database {
     QLever,
-    #[cfg(feature="duckdb")]
+    #[cfg(feature = "duckdb")]
     DuckDB,
     Postgres,
 }
@@ -178,16 +205,16 @@ impl Database {
     pub fn name(&self) -> &str {
         match self {
             Database::QLever => "qlever",
-            #[cfg(feature="duckdb")]
+            #[cfg(feature = "duckdb")]
             Database::DuckDB => "duckdb",
             Database::Postgres => "postgres",
         }
     }
-    
+
     pub fn to_connection(&self, dataset: &String) -> Result<Connection, Box<dyn Error>> {
         match self {
-            Database::QLever =>  Ok(Connection::QLever(QLeverConnection::new(dataset)?)),
-            #[cfg(feature="duckdb")]
+            Database::QLever => Ok(Connection::QLever(QLeverConnection::new(dataset)?)),
+            #[cfg(feature = "duckdb")]
             Database::DuckDB => Ok(Connection::DuckDB(DuckDBConnection::new(dataset)?)),
             Database::Postgres => Ok(Connection::PostGres(PostgresConnection::new(dataset)?)),
         }
@@ -213,12 +240,14 @@ fn read_test_file(filename: &str) -> Result<Vec<TSVRecord>, Box<dyn Error>> {
         .has_headers(true)
         .from_path(filename)
         .expect("Unable to open file");
-    let results: Vec<TSVRecord> =  reader.deserialize().collect::<Result<Vec<TSVRecord>, _>>()?;
+    let results: Vec<TSVRecord> = reader
+        .deserialize()
+        .collect::<Result<Vec<TSVRecord>, _>>()?;
     Ok(results)
 }
 
 pub enum Connection {
-    #[cfg(feature="duckdb")]
+    #[cfg(feature = "duckdb")]
     DuckDB(DuckDBConnection),
     PostGres(PostgresConnection),
     QLever(QLeverConnection),
@@ -227,25 +256,27 @@ pub enum Connection {
 impl Connection {
     pub fn run_test_query(&mut self, record: &TSVRecord) -> u128 {
         match self {
-            #[cfg(feature="duckdb")]
-            Connection::DuckDB(connection) => {
-                connection.run_test_query(record.duckdb.as_ref())
-            },
+            #[cfg(feature = "duckdb")]
+            Connection::DuckDB(connection) => connection.run_test_query(record.duckdb.as_ref()),
             Connection::PostGres(connection) => {
                 connection.run_test_query(record.postgresql.as_ref())
-            },
-            Connection::QLever(connection) => {
-                connection.run_test_query(record.sparql.as_ref())
             }
+            Connection::QLever(connection) => connection.run_test_query(record.sparql.as_ref()),
         }
     }
-    
+
     pub fn close(self) -> Result<(), Box<dyn Error>> {
         match self {
-            Connection::QLever(connection) => {connection.stop().expect("qlever stop failed");},
-            #[cfg(feature="duckdb")]
-            Connection::DuckDB(connection) => {connection.close().expect("connection close failed");},
-            Connection::PostGres(connection) => { drop(connection);},
+            Connection::QLever(connection) => {
+                connection.stop().expect("qlever stop failed");
+            }
+            #[cfg(feature = "duckdb")]
+            Connection::DuckDB(connection) => {
+                connection.close().expect("connection close failed");
+            }
+            Connection::PostGres(connection) => {
+                drop(connection);
+            }
         }
         Ok(())
     }
@@ -265,10 +296,14 @@ impl TestResult {
     }
 }
 
-fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -> Result<Vec<TestResult>, Box<dyn Error>> {
+fn run_test(
+    filename: &String,
+    iterations: usize,
+    connection: &mut Connection,
+) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
     let mut results: Vec<Vec<u128>> = vec![Vec::new(); queries.len()];
-    for _ in 0 .. iterations {
+    for _ in 0..iterations {
         clear_cache().expect("Failed to clear cache");
         // Run Queries
         for (id, record) in queries.iter().enumerate() {
@@ -276,10 +311,15 @@ fn run_test(filename: &String, iterations: usize, connection: &mut Connection) -
             results[id].push(result)
         }
     }
-   let results =  results.iter().enumerate().map(|(index, value) | {
-        TestResult {id: index, results: value.clone()}
-    }).collect();
-    
+    let results = results
+        .iter()
+        .enumerate()
+        .map(|(index, value)| TestResult {
+            id: index,
+            results: value.clone(),
+        })
+        .collect();
+
     Ok(results)
 }
 
@@ -288,17 +328,16 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
     let _ = Command::new("bash")
         .arg("-c")
         .arg("sync; sleep 5; echo 3 > /proc/sys/vm/drop_caches")
-        .output().unwrap();
+        .output()
+        .unwrap();
     Ok(())
 }
 
 fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
-        .has_headers(true)
+        .has_headers(false)
         .from_writer(File::create(filename.as_str())?);
-
-    writer.write_record(&["id", "values..."])?;
 
     for result in results {
         writer.write_record(result.to_tsv_record())?;
@@ -307,7 +346,10 @@ fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<
     Ok(())
 }
 
-fn write_results_aggregated(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
+fn write_results_aggregated(
+    results: &Vec<TestResult>,
+    filename: String,
+) -> Result<(), Box<dyn Error>> {
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .has_headers(true)
@@ -323,11 +365,15 @@ fn write_results_aggregated(results: &Vec<TestResult>, filename: String) -> Resu
         let max = numbers.last().unwrap();
         let median = numbers[numbers.len() / 2];
         let mut occurences = HashMap::new();
-        let mode = numbers.iter().copied().max_by_key(|&n| {
-            let count = occurences.entry(n).or_insert(0);
-            *count += 1;
-            *count
-        }).unwrap();
+        let mode = numbers
+            .iter()
+            .copied()
+            .max_by_key(|&n| {
+                let count = occurences.entry(n).or_insert(0);
+                *count += 1;
+                *count
+            })
+            .unwrap();
         writer.write_record(&[
             result.id.to_string(),
             min.to_string(),
@@ -343,27 +389,33 @@ fn write_results_aggregated(results: &Vec<TestResult>, filename: String) -> Resu
 
 async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
     let url = "https://dblp.org/xml/dblp.xml.gz";
-    
+
     let client = reqwest::Client::new();
     let response = client.get(url).send().await?;
-    
+
     if !response.status().is_success() {
-        return Err(format!("HTTP request failed with status: {}", response.status().as_str()).into());
+        return Err(format!(
+            "HTTP request failed with status: {}",
+            response.status().as_str()
+        )
+        .into());
     }
-    
-    let stream = response.bytes_stream()
+
+    let stream = response
+        .bytes_stream()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
-    
+
     let reader = StreamReader::new(stream);
-    
+
     let mut decoder = GzipDecoder::new(reader);
-    
+
     let mut output_file = tokio::fs::File::create(filename).await?;
-    
+
     let mut buffer = Vec::new();
     decoder.read_to_end(&mut buffer).await?;
     output_file.write_all(&buffer).await?;
-    
+
     println!("Download successful");
     Ok(())
 }
+
