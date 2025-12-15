@@ -8,6 +8,7 @@ use clap::{Arg, ArgAction, command, value_parser};
 use csv::ReaderBuilder;
 use futures::TryStreamExt;
 use serde::Deserialize;
+use std::time::Duration;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, create_dir_all};
@@ -147,7 +148,8 @@ fn main() {
             println!("Downloading {url}");
             let client = reqwest::blocking::Client::builder()
                 .timeout(Duration::from_mins(15))
-                .build()?;
+                .build()
+                .unwrap();
             let response = client.get(url).send().unwrap();
             let file_path = format!("/data/{country}-latest.osm.pbf");
             let mut file = File::create(&file_path).unwrap();
