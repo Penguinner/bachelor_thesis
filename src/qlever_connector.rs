@@ -57,7 +57,7 @@ impl QLeverConnection {
         match dataset_parts[0] {
             "osm-country" => {
                 let continent = dataset_parts[1];
-                let continent_str = format!("Continent = {continent}");
+                let continent_str = format!("CONTINENT = {continent}");
                 let country = dataset_parts[2];
                 let country_str = format!("COUNTRY = {country}");
                 let continent_regex = Regex::new(r"CONTINENT\s*=\s(europe)").unwrap();
@@ -71,7 +71,7 @@ impl QLeverConnection {
     }
 
     fn sanitize_toml(string: String) -> String {
-        let comments = Regex::new(r"#.*\n").unwrap();
+        let comments = Regex::new(r"# .*\n").unwrap();
         let jsons = Regex::new(r"=\s(.*)").unwrap();
         let mut new_toml = comments.replace_all(string.as_str(), "").to_string();
         new_toml = jsons.replace_all(new_toml.as_str(), |caps: &Captures| {
