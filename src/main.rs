@@ -144,7 +144,7 @@ fn main() {
             let continent = dataset_parts[1];
             let country = dataset_parts[2];
             let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
-            println!("Downloading {url}")
+            println!("Downloading {url}");
             let response = reqwest::blocking::get(url).unwrap();
             let file_path = format!("/data/{country}-latest.osm.pbf");
             let mut file = File::create(&file_path).unwrap();
