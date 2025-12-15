@@ -136,7 +136,7 @@ fn main() {
             parser.run();
             println!("Finished Parsing DBLP data");
         }
-        "osm_country"
+        "osm-country"
             if tests
                 .iter()
                 .any(|x| x.name() == "duckdb" || x.name() == "postgres") =>
