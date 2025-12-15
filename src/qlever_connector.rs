@@ -74,9 +74,10 @@ impl QLeverConnection {
         let comments = Regex::new(r"#\s.*\n?").unwrap();
         let jsons = Regex::new(r"=\s(.*)").unwrap();
         let mut new_toml = comments.replace_all(string.as_str(), "").to_string();
+        new_toml = new_toml.as_str().replace("\"","\'").to_string();
         new_toml = jsons.replace_all(new_toml.as_str(), |caps: &Captures| {
             let word = caps[1].to_string();
-            format!("= \'{word}\'")
+            format!("= \"{word}\"")
         }).to_string();
         new_toml.trim().to_string()
     }
