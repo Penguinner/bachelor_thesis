@@ -71,7 +71,7 @@ impl QLeverConnection {
     }
 
     fn sanitize_toml(string: String) -> String {
-        let comments = Regex::new(r"# .*\n").unwrap();
+        let comments = Regex::new(r"^#.*\n").unwrap();
         let jsons = Regex::new(r"=\s(.*)").unwrap();
         let mut new_toml = comments.replace_all(string.as_str(), "").to_string();
         new_toml = jsons.replace_all(new_toml.as_str(), |caps: &Captures| {
