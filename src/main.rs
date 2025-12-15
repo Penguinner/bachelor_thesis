@@ -147,7 +147,7 @@ fn main() {
             let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
             println!("Downloading {url}");
             let client = reqwest::blocking::Client::builder()
-                .timeout(Duration::from_mins(15))
+                .timeout(Duration::from_secs(900))
                 .build()
                 .unwrap();
             let response = client.get(url).send().unwrap();
