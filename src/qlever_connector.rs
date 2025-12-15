@@ -57,11 +57,13 @@ impl QLeverConnection {
         match dataset_parts[0] {
             "osm-country" => {
                 let continent = dataset_parts[1];
+                let continent_str = format!("Continent = {continent}");
                 let country = dataset_parts[2];
+                let country_str = format!("COUNTRY = {country}");
                 let continent_regex = Regex::new(r"CONTINENT\s*=\s(europe)").unwrap();
                 let country_regex = Regex::new(r"COUNTRY\s*=\s(switzerland)").unwrap();
-                let mut new_content = continent_regex.replace(content.as_str(), continent).to_string();
-                new_content = country_regex.replace(new_content.as_str(), country).to_string();
+                let mut new_content = continent_regex.replace(content.as_str(), continent_str).to_string();
+                new_content = country_regex.replace(new_content.as_str(), country_str).to_string();
                 return new_content
             }
             _ => unimplemented!()
