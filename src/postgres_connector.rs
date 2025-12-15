@@ -38,7 +38,7 @@ impl PostgresConnection {
             docker.create_image(
                 Some(
                     bollard::query_parameters::CreateImageOptionsBuilder::default()
-                        .from_image("postgres:latest")
+                        .from_image(image)
                         .build(),
                 ),
                 None,
