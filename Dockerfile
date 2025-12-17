@@ -6,7 +6,14 @@ COPY Cargo.toml .
 COPY src ./src
 RUN cargo install --path . --all-features
 
-# Stage 2: Runtime enviornment
+# Stage 2: osm2rdf
+FROM ubuntu:latest AS osm2rdf_builder
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git g++ libexpat1-dev cmake libbz2-dev libomp-dev zlib1g-dev
+COPY . /app/
+RUN cd /app/ && mkdir -p build && cd build && cmake .. && make -j
+
+
+# Stage 3: Runtime enviornment
 FROM ubuntu:latest
 LABEL authors="Felix Rüdlin"
 
@@ -21,6 +28,7 @@ RUN apt-get update && \
     curl \
     ca-certificates \
     osm2pgsql \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://get.docker.com | sh
@@ -28,8 +36,10 @@ RUN curl -fsSL https://get.docker.com | sh
 # Copy needed files
 COPY --from=rust_builder /usr/local/cargo/bin/bachelor_thesis /usr/local/bin/bachelor_thesis
 COPY --from=rust_builder /usr/src/bachelor_thesis/src/data /usr/src/bachelor_thesis
+COPY --from=osm2rdf_builder /app/build/apps/osm2rdf /usr/osm2rdf_builder
 
 ENV PATH="/usr/qlever-venv/bin:$PATH"
+ENV PATH="/usr/osm2rdf:$PATH"
 ENV RUST_BACKTRACE=1
 
 #CMD ["bachelor_thesis", "-h"]
