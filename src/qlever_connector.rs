@@ -382,7 +382,7 @@ fn command_assist(command_str: &str, args: &[&str], current_dir: &str) -> Result
         .current_dir(current_dir)
         .output()
         .expect(("Failed executing command ".to_string() + command_str + " " + args.join(" ").as_str()).as_ref());
-    println!("executed_command: {}", command_str + " " + args.join(" ").as_str());
+    println!("executed_command: {}", command_str.to_string() + " " + args.join(" ").as_str());
     println!("status: {}", &command.status);
     println!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
     println!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
