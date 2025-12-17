@@ -142,10 +142,6 @@ impl QLeverConnection {
             ).as_str();
         }
 
-        if let Some(encode_as_id) = qlever_file.index.get("ENCODE_AS_ID") {
-            command += format!(" --encode_as_id {encode_as_id}").as_str();
-        }
-
         command += format!(" | tee /index/{name}.index-log.txt'").as_str();
         command_assist("bash", &["-c", command.as_str()], ".").unwrap()
     }
