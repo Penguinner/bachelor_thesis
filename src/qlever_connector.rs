@@ -108,9 +108,9 @@ impl QLeverConnection {
             -c '"
         };
         // Add files arguments
-        let mut vocab = "on-disk-compressed"
+        let mut vocab = "on-disk-compressed";
         if let Some(vocabulary) = qlever_file.index.get("VOCABULARY_TYPE") {
-            vocab = vocabulary
+            vocab = vocabulary;
         }
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
             command += format!("IndexBuilderMain \
@@ -138,6 +138,10 @@ impl QLeverConnection {
                 --stxxl-memory {stxxl}\
                 "
             ).as_str();
+        }
+
+        if let Some(encode_as_id) = qlever_file.index.get("ENCODE_AS_ID") {
+            command += format!("--encode_as_id {encoded_as_id}");
         }
 
         command += format!(" | tee /index/{name}.index-log.txt'").as_str();
