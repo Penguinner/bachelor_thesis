@@ -129,16 +129,11 @@ impl QLeverConnection {
                 command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str();
             }
         } else {
-            if name.to_string().contains("osm") {
-                command += format!("bzcat {name}.ttl.bz2").as_str();
-            }
-            else {
-                command += qlever_file.index.get("CAT_INPUT_FILES").unwrap();
-            }
+            command += qlever_file.index.get("CAT_INPUT_FILES").unwrap();
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
             
             command += format!(
-                " IndexBuilderMain \
+                "| IndexBuilderMain \
                 -i {name} \
                 -s {name}.settings.json \
                 --vocabulary-type {vocab} -F ttl -f - \
