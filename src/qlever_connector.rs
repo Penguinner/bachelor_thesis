@@ -130,7 +130,7 @@ impl QLeverConnection {
             }
         } else {
             if name.to_string().contains("osm") {
-                command += format!("bzcat {name}.ttl.bz2")
+                command += format!("bzcat {name}.ttl.bz2").as_str();
             }
             else {
                 command += qlever_file.index.get("CAT_INPUT_FILES").unwrap();
