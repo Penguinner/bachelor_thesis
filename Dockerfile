@@ -8,12 +8,10 @@ RUN cargo install --path . --all-features
 
 # Stage 2: osm2rdf
 FROM ubuntu:latest AS osm2rdf_builder
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git g++ libexpat1-dev cmake libbz2-dev libomp-dev zlib1g-dev
-RUN mkdir /app && git clone https://github.com/ad-freiburg/osm2rdf.git /app
-RUN cd /app/ && mkdir -p build && cd build && cmake .. && make -j
 
 
-# Stage 3: Runtime enviornment
+
+# Stage 2: Runtime enviornment
 FROM ubuntu:latest
 LABEL authors="Felix Rüdlin"
 
@@ -33,13 +31,17 @@ RUN apt-get update && \
 
 RUN curl -fsSL https://get.docker.com | sh
 
+# osm2rdf
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git g++ libexpat1-dev cmake libbz2-dev libomp-dev zlib1g-dev
+RUN mkdir /app && git clone https://github.com/ad-freiburg/osm2rdf.git /app
+RUN cd /app/ && mkdir -p build && cd build && cmake .. && make -j
+
 # Copy needed files
 COPY --from=rust_builder /usr/local/cargo/bin/bachelor_thesis /usr/local/bin/bachelor_thesis
 COPY --from=rust_builder /usr/src/bachelor_thesis/src/data /usr/src/bachelor_thesis
-COPY --from=osm2rdf_builder /app/build /usr/osm2rdf_builder
 
 ENV PATH="/usr/qlever-venv/bin:$PATH"
-ENV PATH="/usr/osm2rdf_builder/apps:$PATH"
+ENV PATH="/app/build/apps:$PATH"
 ENV RUST_BACKTRACE=1
 
 #CMD ["bachelor_thesis", "-h"]
