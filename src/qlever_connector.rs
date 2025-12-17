@@ -83,7 +83,7 @@ impl QLeverConnection {
     }
     
     fn get_data(qlever_file: &QleverFile) {
-        println!(qlever_file.data.get("GET_DATA_CMD").unwrap().as_str());
+        println!(qlever_file.data.get("GET_DATA_CMD").unwrap());
         command_assist("bash",
                        &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()],
                        format!("/data/{}", qlever_file.data.get("NAME").unwrap()).as_str()
