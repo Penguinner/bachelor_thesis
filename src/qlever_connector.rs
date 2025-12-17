@@ -108,11 +108,15 @@ impl QLeverConnection {
             -c '"
         };
         // Add files arguments
+        let mut vocab = "on-disk-compressed"
+        if let Some(vocabulary) = qlever_file.index.get("VOCABULARY_TYPE") {
+            vocab = vocabulary
+        }
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
             command += format!("IndexBuilderMain \
             -i {name} \
             -s {name}.settings.json \
-            --vocabulary-type on-disk-compressed").as_str();
+            --vocabulary-type {vocab}").as_str();
             let multi_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap();
             let json: Value = serde_json::from_str(&multi_json).unwrap();
             let glob_cmd = format!("/data/{name}/{0}", json["for-each"].as_str().unwrap());
@@ -125,11 +129,12 @@ impl QLeverConnection {
         } else {
             command += qlever_file.index.get("CAT_INPUT_FILES").unwrap();
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
+            
             command += format!(
                 " IndexBuilderMain \
                 -i {name} \
                 -s {name}.settings.json \
-                --vocabulary-type on-disk-compressed -F ttl -f - \
+                --vocabulary-type {vocab} -F ttl -f - \
                 --stxxl-memory {stxxl}\
                 "
             ).as_str();
