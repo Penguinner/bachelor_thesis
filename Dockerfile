@@ -36,10 +36,10 @@ RUN curl -fsSL https://get.docker.com | sh
 # Copy needed files
 COPY --from=rust_builder /usr/local/cargo/bin/bachelor_thesis /usr/local/bin/bachelor_thesis
 COPY --from=rust_builder /usr/src/bachelor_thesis/src/data /usr/src/bachelor_thesis
-COPY --from=osm2rdf_builder /app/build/apps /usr/osm2rdf_builder
+COPY --from=osm2rdf_builder /app/build /usr/osm2rdf_builder
 
 ENV PATH="/usr/qlever-venv/bin:$PATH"
-ENV PATH="/usr/osm2rdf_builder:$PATH"
+ENV PATH="/usr/osm2rdf_builder/apps:$PATH"
 ENV RUST_BACKTRACE=1
 
 #CMD ["bachelor_thesis", "-h"]
