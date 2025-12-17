@@ -141,7 +141,7 @@ impl QLeverConnection {
         }
 
         if let Some(encode_as_id) = qlever_file.index.get("ENCODE_AS_ID") {
-            command += format!("--encode_as_id {encoded_as_id}");
+            command += format!("--encode_as_id {encode_as_id}").as_str();
         }
 
         command += format!(" | tee /index/{name}.index-log.txt'").as_str();
