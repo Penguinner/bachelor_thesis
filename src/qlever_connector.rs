@@ -94,7 +94,7 @@ impl QLeverConnection {
         let name = qlever_file.data.get("NAME").unwrap().as_str();
         let path = format!("/data/{name}/{name}.settings.json");
         let mut file = File::create(path.clone()).unwrap();
-        file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().as_bytes()).unwrap();
+        file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().replace("\'","\"").as_bytes()).unwrap();
         // Create Index
         let mut command = format!{
             "docker run --rm -u $(id -u):$(id -g) \
