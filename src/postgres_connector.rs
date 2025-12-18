@@ -115,6 +115,9 @@ impl PostgresConnection {
         .args(["-c", format!("osm2pgsql -c -d database -U postgres -W password -H 172.17.0.1 -P 5432 {file_path}").as_str()])
         .output()
         .unwrap();
+        println!("status: {}", &osm2pgsql.status);
+        println!("stdout:\n{}", String::from_utf8_lossy(&osm2pgsql.stdout));
+        println!("stderr:\n{}", String::from_utf8_lossy(&osm2pgsql.stderr));
         println!("Finished creating tables and inserting data for OSM");
     }
 
