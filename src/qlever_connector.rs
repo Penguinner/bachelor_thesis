@@ -142,6 +142,10 @@ impl QLeverConnection {
             ).as_str();
         }
 
+        if let Some(value) = qlever_file.index.get("PARALLEL_PARSING") && value == 'true' {
+            command += " -p";
+        }
+
         command += format!(" | tee /index/{name}.index-log.txt'").as_str();
         command_assist("bash", &["-c", command.as_str()], ".").unwrap()
     }
