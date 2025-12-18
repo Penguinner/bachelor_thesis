@@ -143,7 +143,7 @@ impl QLeverConnection {
         }
 
         if let Some(value) = qlever_file.index.get("PARALLEL_PARSING") && value == "true" {
-            command += " -p";
+            command += " -p true";
         }
 
         command += format!(" | tee /index/{name}.index-log.txt'").as_str();
