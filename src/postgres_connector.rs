@@ -112,7 +112,7 @@ impl PostgresConnection {
         let country = dataset_parts[2];
         let file_path = format!("/data/{country}-latest.osm.pbf");
         let osm2pgsql = Command::new("bash")
-        .args(["-c", format!("osm2pgsql -c -d database -U postgres -W password -H 172.17.0.1 -P 5432 {file_path}").as_str()])
+        .args(["-c", format!("osm2pgsql -c -d database -U postgres -H 172.17.0.1 -P 5432 {file_path}").as_str()])
         .output()
         .unwrap();
         println!("status: {}", &osm2pgsql.status);
