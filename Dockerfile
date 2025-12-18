@@ -39,6 +39,7 @@ RUN cd /app/ && mkdir -p build && cd build && cmake .. && make -j
 # Copy needed files
 COPY --from=rust_builder /usr/local/cargo/bin/bachelor_thesis /usr/local/bin/bachelor_thesis
 COPY --from=rust_builder /usr/src/bachelor_thesis/src/data /usr/src/bachelor_thesis
+COPY --from=rust_builder /usr/src/bachelor_thesis/.pgpass ~/.pgpass
 
 ENV PATH="/usr/qlever-venv/bin:$PATH"
 ENV PATH="/app/build/apps:$PATH"
