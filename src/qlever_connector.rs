@@ -142,7 +142,7 @@ impl QLeverConnection {
             ).as_str();
         }
 
-        if let Some(value) = qlever_file.index.get("PARALLEL_PARSING") && value == 'true' {
+        if let Some(value) = qlever_file.index.get("PARALLEL_PARSING") && value == "true" {
             command += " -p";
         }
 
