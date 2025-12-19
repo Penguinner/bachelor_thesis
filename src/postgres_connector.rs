@@ -180,7 +180,7 @@ impl PostgresConnection {
             columns = row.len();
         }
         let _ = file.write(
-            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, columns, result.len()).as_bytes()
+            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}\n", query, duration, columns, result.len()).as_bytes()
         );
         
         duration
