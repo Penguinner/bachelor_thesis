@@ -176,7 +176,7 @@ impl PostgresConnection {
             .open(format!("/data/postgres.{}.log", self.dataset))
             .unwrap();
         let _ = file.write(
-            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, result.get(0).unwrap().len(), result.len()).as_bytes()
+            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, result.get(0).unwrap_or_else(vec![]).len(), result.len()).as_bytes()
         );
         
         duration
