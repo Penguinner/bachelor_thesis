@@ -41,7 +41,7 @@ impl DuckDBConnection {
         let continent = dataset_parts[1];
         let country = dataset_parts[2];
         let file_path = format!("/data/{country}-latest.osm.pbf");
-        let query = format!("CREATE TABLE osm AS SELECT * FROM ST_ReadOSM({file_path})");
+        let query = format!("CREATE TABLE osm AS SELECT * FROM ST_ReadOSM('{file_path}');");
         self.connection.execute(&query, []).unwrap();
     }
 
