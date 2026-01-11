@@ -1,0 +1,68 @@
+This is BibTeX, Version 0.99d (TeX Live 2025/nixos.org)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: main.aux
+A level-1 auxiliary file: sections/cover.aux
+A level-1 auxiliary file: sections/information.aux
+A level-1 auxiliary file: sections/declaration_english.aux
+A level-1 auxiliary file: sections/acknowledgements.aux
+A level-1 auxiliary file: sections/quote.aux
+A level-1 auxiliary file: sections/abstract.aux
+A level-1 auxiliary file: sections/zusammenfassung.aux
+A level-1 auxiliary file: sections/table_of_contents.aux
+A level-1 auxiliary file: sections/motivation.aux
+A level-1 auxiliary file: sections/fundamentals.aux
+A level-1 auxiliary file: sections/methodology.aux
+A level-1 auxiliary file: sections/results.aux
+A level-1 auxiliary file: sections/discussion.aux
+A level-1 auxiliary file: sections/conclusion.aux
+A level-1 auxiliary file: sections/symbols.aux
+A level-1 auxiliary file: sections/figures.aux
+A level-1 auxiliary file: sections/tables.aux
+A level-1 auxiliary file: sections/algorithms.aux
+A level-1 auxiliary file: sections/glossary.aux
+A level-1 auxiliary file: sections/references.aux
+The style file: plain.bst
+A level-1 auxiliary file: sections/appendix.aux
+Database file #1: references/motivation.bib
+Database file #2: references/fundamentals.bib
+You've used 1 entry,
+            2118 wiz_defined-function locations,
+            524 strings with 4579 characters,
+and the built_in function-call counts, 235 in all, are:
+= -- 19
+> -- 7
+< -- 0
++ -- 3
+- -- 2
+* -- 10
+:= -- 47
+add.period$ -- 3
+call.type$ -- 1
+change.case$ -- 3
+chr.to.int$ -- 0
+cite$ -- 1
+duplicate$ -- 12
+empty$ -- 23
+format.name$ -- 2
+if$ -- 47
+int.to.chr$ -- 0
+int.to.str$ -- 1
+missing$ -- 2
+newline$ -- 8
+num.names$ -- 2
+pop$ -- 8
+preamble$ -- 1
+purify$ -- 3
+quote$ -- 0
+skip$ -- 6
+stack$ -- 0
+substring$ -- 5
+swap$ -- 1
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 2
+warning$ -- 0
+while$ -- 2
+width$ -- 2
+write$ -- 12

@@ -1,0 +1,266 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025/nixos.org) (preloaded format=pdflatex 1980.1.1)  3 JAN 2026 15:58
+entering extended mode
+ restricted \write18 enabled.
+ file:line:error style messages enabled.
+ %&-line parsing enabled.
+**/home/felix/bachelor_thesis/thesis/cover/titlepage.tex
+(/home/felix/bachelor_thesis/thesis/cover/titlepage.tex
+LaTeX2e <2025-06-01> patch level 1
+L3 programming layer <2025-06-09>
+(/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/base/article.cls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+(/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/base/size12.clo
+File: size12.clo 2025/01/22 v1.4n Standard LaTeX file (size option)
+)
+\c@part=\count275
+\c@section=\count276
+\c@subsection=\count277
+\c@subsubsection=\count278
+\c@paragraph=\count279
+\c@subparagraph=\count280
+\c@figure=\count281
+\c@table=\count282
+\abovecaptionskip=\skip49
+\belowcaptionskip=\skip50
+\bibindent=\dimen148
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/babel/babel.sty
+Package: babel 2025/06/10 v25.10 The multilingual framework for pdfLaTeX, LuaLaTeX and XeLaTeX
+\babel@savecnt=\count283
+LaTeX Encoding Info:    Redeclaring text command \ij (encoding OT1) on input line 2043.
+LaTeX Encoding Info:    Redeclaring text command \IJ (encoding OT1) on input line 2045.
+LaTeX Encoding Info:    Redeclaring text command \ij (encoding T1) on input line 2047.
+LaTeX Encoding Info:    Redeclaring text command \IJ (encoding T1) on input line 2048.
+LaTeX Encoding Info:    Ignoring declaration for text command \ij (encoding ?) on input line 2049.
+LaTeX Encoding Info:    Ignoring declaration for text command \IJ (encoding ?) on input line 2051.
+LaTeX Encoding Info:    Ignoring declaration for text command \SS (encoding ?) on input line 2076.
+\U@D=\dimen149
+\l@unhyphenated=\language90
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/babel/txtbabel.def)
+\bbl@readstream=\read2
+\bbl@dirlevel=\count284
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/babel-english/english.ldf
+Language: english 2017/06/06 v3.3r English support from the babel system
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/babel/locale/en/babel-english.tex
+Package babel Info: Importing font and identification data for english
+(babel)             from babel-en.ini. Reported on input line 11.
+)
+Package babel Info: Hyphen rules for 'canadian' set to \l@english
+(babel)             (\language0). Reported on input line 102.
+Package babel Info: Hyphen rules for 'australian' set to \l@ukenglish
+(babel)             (\language22). Reported on input line 105.
+Package babel Info: Hyphen rules for 'newzealand' set to \l@ukenglish
+(babel)             (\language22). Reported on input line 108.
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/babel-german/ngerman.ldf
+Language: ngerman 2024/12/10 v2.15 German support for babel (post-1996 orthography)
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/babel/locale/de/babel-ngerman.tex
+Package babel Info: Importing font and identification data for ngerman
+(babel)             from babel-de.ini. Reported on input line 11.
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/babel-german/ngermanb.ldf
+Language: ngermanb 2024/12/10 v2.15 German support for babel (post-1996 orthography)
+Package babel Info: Making " an active character on input line 122.
+))) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/base/inputenc.sty
+Package: inputenc 2024/02/08 v1.3d Input encoding file
+\inpenc@prehook=\toks17
+\inpenc@posthook=\toks18
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/psnfss/helvet.sty
+Package: helvet 2020/03/25 PSNFSS-v9.3 (WaS) 
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/graphics/keyval.sty
+Package: keyval 2022/05/29 v1.15 key=value parser (DPC)
+\KV@toks@=\toks19
+)) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/base/fontenc.sty
+Package: fontenc 2024/12/21 v2.1c Standard LaTeX package
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/geometry/geometry.sty
+Package: geometry 2020/01/02 v5.9 Page Geometry
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/iftex/ifvtex.sty
+Package: ifvtex 2019/10/25 v1.7 ifvtex legacy package. Use iftex instead.
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/generic/iftex/iftex.sty
+Package: iftex 2024/12/12 v1.0g TeX engine tests
+))
+\Gm@cnth=\count285
+\Gm@cntv=\count286
+\c@Gm@tempcnt=\count287
+\Gm@bindingoffset=\dimen150
+\Gm@wd@mp=\dimen151
+\Gm@odd@mp=\dimen152
+\Gm@even@mp=\dimen153
+\Gm@layoutwidth=\dimen154
+\Gm@layoutheight=\dimen155
+\Gm@layouthoffset=\dimen156
+\Gm@layoutvoffset=\dimen157
+\Gm@dimlist=\toks20
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/fancyhdr/fancyhdr.sty
+Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
+\f@nch@headwidth=\skip51
+\f@nch@offset@elh=\skip52
+\f@nch@offset@erh=\skip53
+\f@nch@offset@olh=\skip54
+\f@nch@offset@orh=\skip55
+\f@nch@offset@elf=\skip56
+\f@nch@offset@erf=\skip57
+\f@nch@offset@olf=\skip58
+\f@nch@offset@orf=\skip59
+\f@nch@height=\skip60
+\f@nch@footalignment=\skip61
+\f@nch@widthL=\skip62
+\f@nch@widthC=\skip63
+\f@nch@widthR=\skip64
+\@temptokenb=\toks21
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/graphics/graphicx.sty
+Package: graphicx 2024/12/31 v1.2e Enhanced LaTeX Graphics (DPC,SPQR)
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/graphics/graphics.sty
+Package: graphics 2024/08/06 v1.4g Standard LaTeX Graphics (DPC,SPQR)
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/graphics/trig.sty
+Package: trig 2023/12/02 v1.11 sin cos tan (DPC)
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/graphics-cfg/graphics.cfg
+File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
+)
+Package graphics Info: Driver file: pdftex.def on input line 106.
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/graphics-def/pdftex.def
+File: pdftex.def 2024/04/13 v1.2c Graphics/color driver for pdftex
+))
+\Gin@req@height=\dimen158
+\Gin@req@width=\dimen159
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/textpos/textpos.sty
+Package: textpos 2022/07/23 v1.10.1
+Package textpos Info: choosing support for LaTeX3 on input line 60.
+\TP@textbox=\box53
+\TP@holdbox=\box54
+\TPHorizModule=\dimen160
+\TPVertModule=\dimen161
+\TP@margin=\dimen162
+\TP@absmargin=\dimen163
+
+Grid set 16 x 16 = 37.34424pt x 52.81541pt
+\TPboxrulesize=\dimen164
+\TP@ox=\dimen165
+\TP@oy=\dimen166
+\TP@tbargs=\toks22
+TextBlockOrigin set to 0pt x 0pt
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/setspace/setspace.sty
+Package: setspace 2022/12/04 v6.7b set line spacing
+)
+LaTeX Font Info:    Trying to load font information for T1+phv on input line 31.
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/psnfss/t1phv.fd
+File: t1phv.fd 2020/03/25 scalable font definitions for T1/phv.
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/l3backend/l3backend-pdftex.def
+File: l3backend-pdftex.def 2025-06-09 L3 backend support: PDF output (pdfTeX)
+\l__color_backend_stack_int=\count288
+)
+
+LaTeX Warning: Unused global option(s):
+    [A4paper].
+
+(./titlepage.aux
+Package babel Info: 'ngerman' activates 'ngerman' shorthands.
+(babel)             Reported  on input line 5.
+)
+\openout1 = `titlepage.aux'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 31.
+LaTeX Font Info:    ... okay on input line 31.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 31.
+LaTeX Font Info:    ... okay on input line 31.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 31.
+LaTeX Font Info:    ... okay on input line 31.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 31.
+LaTeX Font Info:    ... okay on input line 31.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 31.
+LaTeX Font Info:    ... okay on input line 31.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 31.
+LaTeX Font Info:    ... okay on input line 31.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 31.
+LaTeX Font Info:    ... okay on input line 31.
+
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+*geometry* verbose mode - [ preamble ] result:
+* driver: pdftex
+* paper: a4paper
+* layout: <same size as paper>
+* layoutoffset:(h,v)=(0.0pt,0.0pt)
+* modes: 
+* h-part:(L,W,R)=(71.13188pt, 455.24411pt, 71.13188pt)
+* v-part:(T,H,B)=(71.13188pt, 672.50832pt, 101.40665pt)
+* \paperwidth=597.50787pt
+* \paperheight=845.04684pt
+* \textwidth=455.24411pt
+* \textheight=672.50832pt
+* \oddsidemargin=-1.1381pt
+* \evensidemargin=-1.1381pt
+* \topmargin=-38.1381pt
+* \headheight=12.0pt
+* \headsep=25.0pt
+* \topskip=12.0pt
+* \footskip=30.0pt
+* \marginparwidth=44.0pt
+* \marginparsep=10.0pt
+* \columnsep=10.0pt
+* \skip\footins=10.8pt plus 4.0pt minus 2.0pt
+* \hoffset=0.0pt
+* \voffset=0.0pt
+* \mag=1000
+* \@twocolumnfalse
+* \@twosidefalse
+* \@mparswitchfalse
+* \@reversemarginfalse
+* (1in=72.27pt=25.4mm, 1cm=28.453pt)
+
+(/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/context/base/mkii/supp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count289
+\scratchdimen=\dimen167
+\scratchbox=\box55
+\nofMPsegments=\count290
+\nofMParguments=\count291
+\everyMPshowfont=\toks23
+\MPscratchCnt=\count292
+\MPscratchDim=\dimen168
+\MPnumerator=\count293
+\makeMPintoPDFobject=\count294
+\everyMPtoPDFconversion=\toks24
+) (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/epstopdf-pkg/epstopdf-base.sty
+Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
+Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 485.
+ (/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/tex/latex/latexconfig/epstopdf-sys.cfg
+File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Live
+))
+
+<UFR_Wortmarke.pdf, id=1, 2962.06625pt x 330.23375pt>
+File: UFR_Wortmarke.pdf Graphic file (type pdf)
+<use UFR_Wortmarke.pdf>
+Package pdftex.def Info: UFR_Wortmarke.pdf  used on input line 43.
+(pdftex.def)             Requested size: 241.84842pt x 26.9584pt.
+
+Overfull \hbox (99.58464pt too wide) has occurred while \output is active
+ [][] 
+ []
+
+<UFR_Siegel_Blau.png, id=2, 284.62335pt x 284.62335pt>
+File: UFR_Siegel_Blau.png Graphic file (type png)
+<use UFR_Siegel_Blau.png>
+Package pdftex.def Info: UFR_Siegel_Blau.png  used on input line 43.
+(pdftex.def)             Requested size: 119.50148pt x 119.50189pt.
+[1
+
+{/nix/store/yg36ilq147awiwvwhymm9768ail8rjhi-texlive-combined-full-2025.20250703/share/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{/nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/fonts/enc/dvips/base/8r.enc} <./UFR_Wortmarke.pdf> <./UFR_Siegel_Blau.png>] (./titlepage.aux)
+ ***********
+LaTeX2e <2025-06-01> patch level 1
+L3 programming layer <2025-06-09>
+ ***********
+ ) 
+Here is how much of TeX's memory you used:
+ 3895 strings out of 467888
+ 69302 string characters out of 5405403
+ 476308 words of memory out of 5000000
+ 32425 multiletter control sequences out of 15000+600000
+ 638555 words of font info for 49 fonts, out of 8000000 for 9000
+ 1141 hyphenation exceptions out of 8191
+ 57i,15n,65p,281b,454s stack positions out of 10000i,1000n,20000p,200000b,200000s
+</nix/store/a4xk35zqigjpqbrdindypnn14fm6id9s-texlive-combined-full-2025.20250703-texmfdist/fonts/type1/urw/helvetic/uhvb8a.pfb>
+Output written on titlepage.pdf (1 page, 331512 bytes).
+PDF statistics:
+ 20 PDF objects out of 1000 (max. 8388607)
+ 11 compressed objects within 1 object stream
+ 0 named destinations out of 1000 (max. 500000)
+ 11 words of extra memory for PDF output out of 10000 (max. 10000000)
+

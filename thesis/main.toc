@@ -1,0 +1,19 @@
+\babel@toc {english}{}\relax 
+\contentsline {section}{\numberline {1}Introduction}{1}{section.1}%
+\contentsline {section}{\numberline {2}Fundamentals}{2}{section.2}%
+\contentsline {section}{\numberline {3}Methodology}{3}{section.3}%
+\contentsline {section}{\numberline {4}Results}{4}{section.4}%
+\contentsline {section}{\numberline {5}Discussion}{5}{section.5}%
+\contentsline {section}{\numberline {6}Conclusion}{6}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Tables and References}{7}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Auto-complete in VSCode}{7}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}'', Quotations and Code}{8}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Clipboard Manager, Git and more}{9}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Glossary}{9}{subsection.6.5}%
+\contentsline {section}{Symbols}{I}{section*.19}%
+\contentsline {section}{List of Figures}{II}{section*.21}%
+\contentsline {section}{List of Tables}{III}{section*.22}%
+\contentsline {section}{List of Algorithms}{IV}{section*.22}%
+\contentsline {section}{Glossary}{V}{section*.24}%
+\contentsline {section}{References}{VI}{section*.26}%
+\contentsline {section}{Appendix}{VII}{section*.26}%
