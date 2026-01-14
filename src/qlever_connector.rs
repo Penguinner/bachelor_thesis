@@ -129,7 +129,7 @@ impl QLeverConnection {
                 command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str();
             }
         } else {
-            command += qlever_file.index.get("CAT_INPUT_FILES").unwrap().as_str().replace("zcat", "ulimit -Sn 500000 && bzcat").as_str();
+            command += qlever_file.index.get("CAT_INPUT_FILES").unwrap().as_str().replace("zcat", "ulimit -Sn 500000 && zcat").as_str();
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
             
             command += format!(
