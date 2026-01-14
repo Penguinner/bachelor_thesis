@@ -373,7 +373,7 @@ struct JsonResult {
 
 #[derive(Deserialize)]
 struct JsonTime {
-    total: f64,
+    total: String,
 }
 
 #[derive(Deserialize)]
