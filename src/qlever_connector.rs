@@ -119,9 +119,8 @@ impl QLeverConnection {
             -i {name} \
             -s {name}.settings.json \
             --vocabulary-type {vocab}").as_str();
-            let multi_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap().as_str().replace("\'","\"").as_str();
-            println!("{}", multi_json);
-            let json: Value = serde_json::from_str(&multi_json).unwrap();
+            let multi_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap().as_str();
+            let json: Value = serde_json::from_str(&multi_json.replace("\'","\"").as_str()).unwrap();
             let glob_cmd = format!("/data/{name}/{0}", json["for-each"].as_str().unwrap());
             for file in glob(glob_cmd.as_str()).unwrap() {
                 let file_path = file.unwrap();
