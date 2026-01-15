@@ -281,7 +281,7 @@ impl QLeverConnection {
             return Err(e.into());
         }
         
-        println!("{}", res);
+        println!("{}", res.unwrap());
         let result: JsonResult = res.unwrap().json::<JsonResult>().expect("deserialize query result failed");
         
         let time: u128 = result.time.total.chars()
