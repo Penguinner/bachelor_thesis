@@ -166,6 +166,9 @@ impl PostgresConnection {
     }
     
     pub fn run_test_query(&mut self, query: &str) -> u128 {
+        if self.client.is_closed() {
+            self.client = create_client();
+        }
         let now = Instant::now();
         let result : Vec<Row> = self.client.query(query, &[]).unwrap();
         let duration = now.elapsed().as_millis();
