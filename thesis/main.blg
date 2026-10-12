@@ -10,6 +10,7 @@ A level-1 auxiliary file: sections/abstract.aux
 A level-1 auxiliary file: sections/zusammenfassung.aux
 A level-1 auxiliary file: sections/table_of_contents.aux
 A level-1 auxiliary file: sections/motivation.aux
+A level-1 auxiliary file: sections/related_work.aux
 A level-1 auxiliary file: sections/fundamentals.aux
 A level-1 auxiliary file: sections/methodology.aux
 A level-1 auxiliary file: sections/results.aux
@@ -27,7 +28,7 @@ Database file #1: references/motivation.bib
 Database file #2: references/fundamentals.bib
 You've used 1 entry,
             2118 wiz_defined-function locations,
-            524 strings with 4579 characters,
+            525 strings with 4604 characters,
 and the built_in function-call counts, 235 in all, are:
 = -- 19
 > -- 7

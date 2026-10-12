@@ -41,6 +41,7 @@ impl QLeverConnection {
         let target = match dataset_parts[0] {
             "dblp" => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp",
             "osm-country" => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-country",
+            "osm-planet" => "https://raw.githubusercontent.com/qlever-dev/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-planet",
             _ => panic!("Invalid dataset"),
         };
         let response = reqwest::blocking::get(target).unwrap();

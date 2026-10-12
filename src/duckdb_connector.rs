@@ -28,7 +28,13 @@ impl DuckDBConnection {
             _ => { return Err("dataset could not be resolved for duckdb Connection".into())}
         }
 
+        conn.activate_profiling();
         Ok(conn)
+    }
+
+    fn activate_profiling(&mut self) {
+        self.connection.execute("PRAGMA enable_profiling = 'no_output'", []).unwrap();
+        self.connection.execute("PRAGMA profiling_mode = 'standard'", []).unwrap();
     }
 
     fn load_spatial_module(&mut self) {
@@ -91,7 +97,8 @@ impl DuckDBConnection {
         let mut stmt = self.connection.prepare(query).unwrap();
         let now = Instant::now();
         let _ = stmt.query(params![]).unwrap();
-        let duration = now.elapsed().as_millis();
+        let profiling = self.connection.get_profiling_info().expect("profiling should be enabled");
+        let duration = profiling.metrics["LATENCY"];
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)

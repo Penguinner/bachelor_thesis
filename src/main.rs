@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, create_dir_all};
 use std::io::Write;
-use std::ops::AddAssign;
 use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
@@ -101,9 +100,7 @@ fn main() {
         )
         .get_matches();
 
-    let queries = matches
-        .get_one::<String>("query_file")
-        .expect("No 'query_file' argument");
+    let queries: String;
     let data_set = matches
         .get_one::<String>("data_set")
         .expect("data_set is required");
@@ -121,41 +118,59 @@ fn main() {
         tests.push(Database::DuckDB);
     }
     
-    // TODO add more datasets
     match data_set.split(" ").collect::<Vec<&str>>()[0].as_ref() {
-        "dblp"
-            if tests
-                .iter()
-                .any(|x| x.name() == "duckdb" || x.name() == "postgres") =>
+        "dblp" =>
         {
-            let rt = Runtime::new().unwrap();
-            let handle = rt.handle();
+            if tests.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+                let rt = Runtime::new().unwrap();
+                let handle = rt.handle();
 
-            let _ = handle.block_on(download_dblp_data("/data/dblp.xml".into()));
-            let mut parser = Parser::new("/data/dblp.xml");
-            parser.run();
-            println!("Finished Parsing DBLP data");
+                let _ = handle.block_on(download_dblp_data("/data/dblp.xml".into()));
+                let mut parser = Parser::new("/data/dblp.xml");
+                parser.run();
+                println!("Finished Parsing DBLP data");
+            }
+            queries = String::from("dblp.tsv");
         }
-        "osm-country"
-            if tests
-                .iter()
-                .any(|x| x.name() == "duckdb" || x.name() == "postgres") =>
+        "osm-country" =>
         {
-            let dataset_parts: Vec<&str> = data_set.split(" ").collect();
-            let continent = dataset_parts[1];
-            let country = dataset_parts[2];
-            let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
-            println!("Downloading {url}");
-            let client = reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(900))
-                .build()
-                .unwrap();
-            let response = client.get(url).send().unwrap();
-            let file_path = format!("/data/{country}-latest.osm.pbf");
-            let mut file = File::create(&file_path).unwrap();
-            file.write_all(&response.bytes().unwrap()).unwrap();
+
+            if tests.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+                let dataset_parts: Vec<&str> = data_set.split(" ").collect();
+                let continent = dataset_parts[1];
+                let country = dataset_parts[2];
+                let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
+                println!("Downloading {url}");
+                let client = reqwest::blocking::Client::builder()
+                    .timeout(Duration::from_secs(900))
+                    .build()
+                    .unwrap();
+                let response = client.get(url).send().unwrap();
+                let file_path = format!("/data/{country}-latest.osm.pbf");
+                let mut file = File::create(&file_path).unwrap();
+                file.write_all(&response.bytes().unwrap()).unwrap();
+            }
+
+            queries = String::from("osm.tsv");
         }
-        _ => (),
+        "osm-planet" =>
+        {
+            if tests.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+                let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
+                println!("Downloading {url}");
+                let client = reqwest::blocking::Client::builder()
+                    .timeout(Duration::from_secs(900))
+                    .build()
+                    .unwrap();
+                let response = client.get(url).send().unwrap();
+                let file_path = format!("/data/planet-latest.osm.pbf");
+                let mut file = File::create(&file_path).unwrap();
+                file.write_all(&response.bytes().unwrap()).unwrap();
+            }
+
+            queries = String::from("osm.tsv");
+        }
+        _ => panic!("Unknown dataset {data_set}!"),
     };
     // Run Tests
     for test in tests {
@@ -165,7 +180,7 @@ fn main() {
             .to_connection(&data_set.to_string())
             .expect(format!("Failed to create connection for {}", test.name()).as_str());
         // Run Queries
-        let results = run_test(queries, iter, &mut conn)
+        let results = run_test(&queries, iter, &mut conn)
             .expect(format!("Failed while testing for {}", test.name()).as_str());
         // Save Results
         let _ = create_dir_all("/extern/results");
@@ -236,6 +251,7 @@ pub enum QueryLang {
 pub struct TSVRecord {
     name: String,
     postgresql: String,
+    #[cfg(feature = "duckdb")]
     duckdb: String,
     sparql: String,
 }

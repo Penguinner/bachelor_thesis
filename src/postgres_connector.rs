@@ -1,10 +1,8 @@
-use crate::parser::Parser;
 use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
 use bollard::query_parameters::CreateContainerOptionsBuilder;
 use bollard::Docker;
 use futures::TryStreamExt;
-use postgres::types::ToSql;
 use postgres::{Client, NoTls, Row};
 use std::collections::HashMap;
 use std::error::Error;
@@ -98,7 +96,7 @@ impl PostgresConnection {
                 conn.insert_dblp_data();
             },
             "osm-country" => {
-                conn.client.execute("CREATE EXTENSION postgis;", &[]);
+                let _ = conn.client.execute("CREATE EXTENSION postgis;", &[]);
                 conn.insert_osm_data();
             }
             _ => { return Err("dataset could not be resolved for postgres Connection".into())}
@@ -146,7 +144,7 @@ impl PostgresConnection {
         ];
         let mut transaction = self.client.transaction().unwrap();
         for (table, file) in queries.iter() {
-            let mut file = File::open(file).unwrap();
+            let file = File::open(file).unwrap();
             let mut reader = BufReader::new(file);
             let mut sink = transaction.copy_in(&format!("COPY {} FROM STDIN (FORMAT CSV, DELIMITER E'\\t', HEADER true)", table)).unwrap();
             
@@ -169,8 +167,9 @@ impl PostgresConnection {
         if self.client.is_closed() {
             self.client = create_client();
         }
+        let stmt = self.client.prepare(query).unwrap();
         let now = Instant::now();
-        let result : Vec<Row> = self.client.query(query, &[]).unwrap();
+        let result : Vec<Row> = self.client.query(&stmt, &[]).unwrap();
         let duration = now.elapsed().as_millis();
         let mut file = OpenOptions::new()
             .write(true)

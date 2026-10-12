@@ -6,11 +6,6 @@ COPY Cargo.toml .
 COPY src ./src
 RUN cargo install --path . --all-features
 
-# Stage 2: osm2rdf
-FROM ubuntu:latest AS osm2rdf_builder
-
-
-
 # Stage 2: Runtime enviornment
 FROM ubuntu:latest
 LABEL authors="Felix Rüdlin"
@@ -40,7 +35,6 @@ RUN cd /app/ && mkdir -p build && cd build && cmake .. && make -j
 COPY --from=rust_builder /usr/local/cargo/bin/bachelor_thesis /usr/local/bin/bachelor_thesis
 COPY --from=rust_builder /usr/src/bachelor_thesis/src/data /usr/src/bachelor_thesis
 
-ENV PATH="/usr/qlever-venv/bin:$PATH"
 ENV PATH="/app/build/apps:$PATH"
 ENV RUST_BACKTRACE=1
 ENV PGPASSFILE="/usr/src/bachelor_thesis/.pgpass"
