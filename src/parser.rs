@@ -436,6 +436,7 @@ fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
                     b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {},
                     _ => return Err(format!("Unexpected end event {0}", String::from_utf8_lossy(e.name().as_ref())).into()),
                 },
+                Ok(Event::Empty(e)) => {}
                 _ => return Err(format!("Unexpected event {0} {1}", self.reader.buffer_position(), self.reader.error_position()).into()),
             }
         }
