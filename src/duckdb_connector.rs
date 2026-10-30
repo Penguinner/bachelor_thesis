@@ -98,7 +98,8 @@ impl DuckDBConnection {
         let now = Instant::now();
         let _ = stmt.query(params![]).unwrap();
         let profiling = self.connection.get_profiling_info().expect("profiling should be enabled");
-        let duration = profiling.metrics["LATENCY"];
+        let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
+        let duration = (duration_secs * 1000.0).round() as u128;
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
