@@ -118,6 +118,8 @@ fn main() {
         tests.push(Database::DuckDB);
     }
     
+    let _ = create_dir_all("/data");
+
     match data_set.split(" ").collect::<Vec<&str>>()[0].as_ref() {
         "dblp" =>
         {
