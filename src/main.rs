@@ -64,7 +64,7 @@ fn main() {
         )
         .arg(
             Arg::new("hot")
-                .long("--hot")
+                .long("hot")
                 .action(ArgAction::SetTrue)
                 .help("also do a hot run")
                 .required(false),
