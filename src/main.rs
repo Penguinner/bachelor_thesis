@@ -4,7 +4,7 @@ use crate::parser::Parser;
 use crate::postgres_connector::PostgresConnection;
 use crate::qlever_connector::QLeverConnection;
 use async_compression::tokio::bufread::GzipDecoder;
-use clap::{Arg, ArgAction, command, value_parser};
+use clap::{Arg, ArgAction, ArgGroup, command, value_parser};
 use csv::ReaderBuilder;
 use futures::TryStreamExt;
 use serde::Deserialize;
@@ -17,6 +17,7 @@ use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
+use itertools::iproduct;
 
 #[cfg(feature = "duckdb")]
 mod duckdb_connector;
@@ -41,16 +42,16 @@ fn main() {
     // CLI Setup
     let matches = command!()
         .arg(
-            Arg::new("query_file")
-                .value_parser(value_parser!(String))
-                .help("path to a query file with the tsv format: (name sql sparql columns rows)")
-                .required(true),
+            Arg::new("dblp")
+                .long("dblp")
+                .action(ArgAction::SetTrue)
+                .help("run the test over the dblp dataset"),
         )
         .arg(
-            Arg::new("data_set")
-                .value_parser(value_parser!(String))
-                .help("dataset to use for this test run")
-                .required(true),
+            Arg::new("osm-planet")
+                .long("osm-planet")
+                .action(ArgAction::SetTrue)
+                .help("run the test over the osm-planet dataset"),
         )
         .arg(
             Arg::new("iter")
@@ -105,12 +106,13 @@ fn main() {
                 .action(ArgAction::SetTrue)
                 .required(false),
         )
+        .group(
+            ArgGroup::new("dataset")
+                .args(["dblp", "osm-planet"])
+                .multiple(true)
+        )
         .get_matches();
 
-    let queries: String;
-    let data_set = matches
-        .get_one::<String>("data_set")
-        .expect("data_set is required");
     let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
 
     let mut dbs: Vec<Database> = Vec::new();
@@ -124,80 +126,63 @@ fn main() {
     if matches.get_flag("duckdb") {
         dbs.push(Database::DuckDB);
     }
-    
+
     let _ = create_dir_all("/extern/data");
 
-    match data_set.split(" ").collect::<Vec<&str>>()[0].as_ref() {
-        "dblp" =>
-        {
-            if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
-                let rt = Runtime::new().unwrap();
-                let handle = rt.handle();
+    let mut datasets: Vec<Dataset> = Vec::new();
+    if matches.get_flag("dblp") {
+        datasets.push(Dataset::Dblp);
+        // Download and Parse dblp data for sql use
+        if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+            let rt = Runtime::new().unwrap();
+            let handle = rt.handle();
 
-                let _ = handle.block_on(download_dblp_data("/extern/data/dblp.xml".into())).unwrap();
-                let mut parser = Parser::new("/extern/data/dblp.xml");
-                parser.run();
-                println!("Finished Parsing DBLP data");
-            }
-            queries = String::from("dblp.tsv");
+            let _ = handle.block_on(download_dblp_data("/extern/data/dblp.xml".into())).unwrap();
+            let mut parser = Parser::new("/extern/data/dblp.xml");
+            parser.run();
+            println!("Finished Parsing DBLP data");
         }
-        "osm-country" =>
-        {
-
-            if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
-                let dataset_parts: Vec<&str> = data_set.split(" ").collect();
-                let continent = dataset_parts[1];
-                let country = dataset_parts[2];
-                let url = format!("https://download.geofabrik.de/{continent}/{country}-latest.osm.pbf");
-                println!("Downloading {url}");
-                let client = reqwest::blocking::Client::builder()
-                    .timeout(Duration::from_secs(900))
-                    .build()
-                    .unwrap();
-                let response = client.get(url).send().unwrap();
-                let file_path = format!("/extern/data/{country}-latest.osm.pbf");
-                let mut file = File::create(&file_path).unwrap();
-                file.write_all(&response.bytes().unwrap()).unwrap();
-            }
-
-            queries = String::from("osm.tsv");
+    }
+    if matches.get_flag("osm-planet") {
+        datasets.push(Dataset::OsmPlanet);
+        // Download osm-planet data
+        if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+            let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
+            println!("Downloading {url}");
+            let client = reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(900))
+                .build()
+                .unwrap();
+            let response = client.get(url).send().unwrap();
+            let file_path = format!("/extern/data/planet-latest.osm.pbf");
+            let mut file = File::create(&file_path).unwrap();
+            file.write_all(&response.bytes().unwrap()).unwrap();
         }
-        "osm-planet" =>
-        {
-            if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
-                let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
-                println!("Downloading {url}");
-                let client = reqwest::blocking::Client::builder()
-                    .timeout(Duration::from_secs(900))
-                    .build()
-                    .unwrap();
-                let response = client.get(url).send().unwrap();
-                let file_path = format!("/extern/data/planet-latest.osm.pbf");
-                let mut file = File::create(&file_path).unwrap();
-                file.write_all(&response.bytes().unwrap()).unwrap();
-            }
+    }
 
-            queries = String::from("osm.tsv");
-        }
-        _ => panic!("Unknown dataset {data_set}!"),
-    };
+    let tests: Vec<Test> = iproduct!(dbs, datasets)
+        .map(|db, dataset| Test {db, dataset})
+        .collect();
+
     // Run Tests
-    for db in dbs {
-        println!("Start of Test: {}", test.name());
+    for test in tests {
+        clear_cache().expect("Failed to clear cache");
+        let name = test.name();
+        println!("Start of Test: {}", name);
         // Create Connection and insert Data
-        let mut conn = test
+        let mut conn = test.db
             .to_connection(&data_set.to_string())
-            .expect(format!("Failed to create connection for {}", test.name()).as_str());
+            .expect(format!("Failed to create connection for {}", name).as_str());
         // Run Queries
-        let results = run_test(&queries, iter, &mut conn, false)
-            .expect(format!("Failed while testing coldrun for {}", test.name()).as_str());
+        let results = run_test(test.dataset.get_query_file(), iter, &mut conn, false)
+            .expect(format!("Failed while testing coldrun for {}", name).as_str());
         // Save Results
         let _ = create_dir_all("/extern/results");
         if matches.get_flag("raw") {
-            write_results(&results, format!("/extern/results/{}.raw.tsv", test.name())).expect(
+            write_results(&results, format!("/extern/results/{}.raw.tsv", name)).expect(
                 format!(
                     "Failed while writing raw results of cold run {} to file",
-                    test.name()
+                    name
                 )
                 .as_str(),
             );
@@ -205,24 +190,24 @@ fn main() {
         if matches.get_flag("aggregate") {
             write_results_aggregated(
                 &results,
-                format!("/extern/results/{}.aggregate.tsv", test.name()),
+                format!("/extern/results/{}.aggregate.tsv", name),
             )
             .expect(
                 format!(
                     "Failed while writing aggregate results of cold run {} to file",
-                    test.name()
+                    name
                 )
                 .as_str(),
             );
         }
         if matches.get_flag("hot") {
             let hot_results = run_test(&queries, iter, &mut conn, true)
-                .expect(format!("Failed while testing hotrun for {}", test.name()).as_str());
+                .expect(format!("Failed while testing hotrun for {}", name).as_str());
             if matches.get_flag("raw") {
-                write_results(&results, format!("/extern/results/{}-hot.raw.tsv", test.name())).expect(
+                write_results(&results, format!("/extern/results/{}-hot.raw.tsv", name)).expect(
                     format!(
                         "Failed while writing raw results of hot run {} to file",
-                        test.name()
+                        name
                     )
                     .as_str(),
                 );
@@ -230,12 +215,12 @@ fn main() {
             if matches.get_flag("aggregate") {
                 write_results_aggregated(
                     &results,
-                    format!("/extern/results/{}-hot.aggregate.tsv", test.name()),
+                    format!("/extern/results/{}-hot.aggregate.tsv", name),
                 )
                 .expect(
                     format!(
                         "Failed while writing aggregate results of hot run {} to file",
-                        test.name()
+                        name
                     )
                     .as_str(),
                 );
@@ -243,11 +228,44 @@ fn main() {
         }
         // Clean Up
         conn.close()
-            .expect(format!("Failed to close connection for {}", test.name()).as_str());
-        clear_cache().expect("Failed to clear cache");
-        println!("End of Test: {}", test.name());
+            .expect(format!("Failed to close connection for {}", name).as_str());
+        println!("End of Test: {}", name);
     }
     println!("Finished Tests");
+}
+
+pub struct Test {
+    db: Database,
+    dataset: Dataset
+}
+
+impl Test {
+
+    pub fn name(&self) -> &String {
+        self.db.name() + "-" + self.dataset.name()
+    }
+}
+
+enum Dataset {
+    Dblp,
+    OsmPlanet,
+}
+
+impl Dataset {
+
+    pub fn get_query_file(&self) -> &String {
+        match self {
+            Dataset::Dblp => &"dblp.tsv".to_string(),
+            Dataset::OsmPlanet => &"osm.tsv".to_string(),
+        }
+    }
+
+    pub fn name(&self) -> &String {
+        match self {
+            Dataset::Dblp => &"DBLP".to_string(),
+            Dataset::OsmPlanet => &"OSM".to_string(),
+        }
+    }
 }
 
 enum Database {
