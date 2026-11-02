@@ -228,17 +228,18 @@ impl QLeverConnection {
             let result = conn.do_query_request(test_request);
             match result {
                 Ok(_) => {
-                    break;
+                    return conn;
                 }
                 Err(e) => {
                     times += 1;
                     print!("{}", e);
-                    sleep(Duration::from_secs(2))
+                    sleep(Duration::from_secs(5))
                 }
             }
         }
 
-        conn
+        panic!("Qlever couldn't be reached");
+        conn // dummy return cant be reached
     }
     
     pub fn stop(&self) -> Result<(), Box<dyn Error>> {
