@@ -205,7 +205,7 @@ fn main() {
             let hot_results = run_test(&query_file, iter, &mut conn, true)
                 .expect(format!("Failed while testing hotrun for {}", name).as_str());
             if matches.get_flag("raw") {
-                write_results(&results, format!("/extern/results/{}-hot.raw.tsv", name)).expect(
+                write_results(&hot_results, format!("/extern/results/{}-hot.raw.tsv", name)).expect(
                     format!(
                         "Failed while writing raw results of hot run {} to file",
                         name
@@ -215,7 +215,7 @@ fn main() {
             }
             if matches.get_flag("aggregate") {
                 write_results_aggregated(
-                    &results,
+                    &hot_results,
                     format!("/extern/results/{}-hot.aggregate.tsv", name),
                 )
                 .expect(
