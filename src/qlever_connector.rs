@@ -202,7 +202,7 @@ impl QLeverConnection {
             docker_id: format!("qlever.server.{name}")
         };
         // Test connection
-        let addr = format!("http://127.0.0.1:{port}");
+        let addr = format!("127.0.0.1:{port}");
         conn.wait_for_connect(addr.as_str());
         conn
     }
