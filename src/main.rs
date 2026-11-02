@@ -442,7 +442,7 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
     // Clear Cache
     let out = Command::new("bash")
         .arg("-c")
-        .arg("sync; echo 3 > /proc/sys/vm/drop_caches")
+        .arg("sync; echo 3 > /drop_caches")
         .output()?;
 
     if !out.status.success() {
