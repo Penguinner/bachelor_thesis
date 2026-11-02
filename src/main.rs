@@ -161,7 +161,7 @@ fn main() {
     }
 
     let tests: Vec<Test> = iproduct!(dbs, datasets)
-        .map(|db, dataset| Test {db, dataset})
+        .map(|(db, dataset)| Test {db, dataset})
         .collect();
 
     // Run Tests
@@ -243,7 +243,7 @@ pub struct Test {
 impl Test {
 
     pub fn name(&self) -> String {
-        let name = format!("{}-{}", self.database.name(), self.dataset.name());
+        let name = format!("{}-{}", self.db.name(), self.dataset.name());
         name
     }
 }

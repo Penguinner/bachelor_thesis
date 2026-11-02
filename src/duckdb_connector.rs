@@ -31,13 +31,8 @@ impl DuckDBConnection {
         Ok(conn)
     }
 
-    pub fn cooldown(&mut self) -> () {
-        self.connection.close();
-        self.connection = Connection::open("db.duckdb").unwrap();
-        self.activate_profiling();
-        if self.dataset.is_geo() {
-            self.load_spatial_module();
-        }
+    pub fn cooldown(mut self) -> DuckDBConnection {
+        self.connection.flush_prepared_statement_cache();
     }
 
     fn activate_profiling(&mut self) {
