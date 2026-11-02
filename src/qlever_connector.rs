@@ -35,6 +35,20 @@ impl QLeverConnection {
         println!("Finished startup");
         Ok(conn)
     }
+
+    pub fn cooldown(&mut self) -> () {
+        let port = self.qlever_file.server.get("PORT").unwrap().as_str();
+        let client = reqwest::blocking::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .no_proxy()
+            .build()
+            .unwrap();
+        let res = client.get(format!("http://127.0.0.1:{port}/?cmd=clear-cache-complete&access-token=benchmark"))
+            .send();
+        if let Err(e) = res {
+            panic!(e)
+        }
+    }
     
     fn setup_config(dataset: &String) -> QleverFile {
         let dataset_parts: Vec<&str> = dataset.split(" ").collect();
@@ -201,7 +215,7 @@ impl QLeverConnection {
         if let Some(timeout) = qlever_file.server.get("TIMEOUT") {
             command += format!(" -s {timeout}").as_str();
         }
-        command += format!(" > /index/{name}.server-log.txt 2>&1'").as_str();
+        command += format!("-a benchmark > /index/{name}.server-log.txt 2>&1'").as_str();
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         let mut conn = QLeverConnection {
             qlever_file: qlever_file.clone(),

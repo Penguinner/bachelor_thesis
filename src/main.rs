@@ -62,6 +62,13 @@ fn main() {
                 .required(false),
         )
         .arg(
+            Arg::new("hot")
+                .long("--hot")
+                .action(ArgAction::SetTrue)
+                .help("also do a hot run")
+                .required(false),
+        )
+        .arg(
             Arg::new("aggregate")
                 .short('a')
                 .long("aggregate")
@@ -106,16 +113,16 @@ fn main() {
         .expect("data_set is required");
     let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
 
-    let mut tests: Vec<Database> = Vec::new();
+    let mut dbs: Vec<Database> = Vec::new();
     if matches.get_flag("qlever") {
-        tests.push(Database::QLever);
+        dbs.push(Database::QLever);
     }
     if matches.get_flag("postgres") {
-        tests.push(Database::Postgres);
+        dbs.push(Database::Postgres);
     }
     #[cfg(feature = "duckdb")]
     if matches.get_flag("duckdb") {
-        tests.push(Database::DuckDB);
+        dbs.push(Database::DuckDB);
     }
     
     let _ = create_dir_all("/extern/data");
@@ -123,7 +130,7 @@ fn main() {
     match data_set.split(" ").collect::<Vec<&str>>()[0].as_ref() {
         "dblp" =>
         {
-            if tests.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+            if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
 
@@ -137,7 +144,7 @@ fn main() {
         "osm-country" =>
         {
 
-            if tests.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+            if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
                 let dataset_parts: Vec<&str> = data_set.split(" ").collect();
                 let continent = dataset_parts[1];
                 let country = dataset_parts[2];
@@ -157,7 +164,7 @@ fn main() {
         }
         "osm-planet" =>
         {
-            if tests.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+            if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
                 let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
                 println!("Downloading {url}");
                 let client = reqwest::blocking::Client::builder()
@@ -175,21 +182,21 @@ fn main() {
         _ => panic!("Unknown dataset {data_set}!"),
     };
     // Run Tests
-    for test in tests {
+    for db in dbs {
         println!("Start of Test: {}", test.name());
         // Create Connection and insert Data
         let mut conn = test
             .to_connection(&data_set.to_string())
             .expect(format!("Failed to create connection for {}", test.name()).as_str());
         // Run Queries
-        let results = run_test(&queries, iter, &mut conn)
-            .expect(format!("Failed while testing for {}", test.name()).as_str());
+        let results = run_test(&queries, iter, &mut conn, false)
+            .expect(format!("Failed while testing coldrun for {}", test.name()).as_str());
         // Save Results
         let _ = create_dir_all("/extern/results");
         if matches.get_flag("raw") {
             write_results(&results, format!("/extern/results/{}.raw.tsv", test.name())).expect(
                 format!(
-                    "Failed while writing raw results of {} to file",
+                    "Failed while writing raw results of cold run {} to file",
                     test.name()
                 )
                 .as_str(),
@@ -202,11 +209,37 @@ fn main() {
             )
             .expect(
                 format!(
-                    "Failed while writing aggregate results of {} to file",
+                    "Failed while writing aggregate results of cold run {} to file",
                     test.name()
                 )
                 .as_str(),
             );
+        }
+        if matches.get_flag("hot") {
+            let hot_results = run_test(&queries, iter, &mut conn, true)
+                .expect(format!("Failed while testing hotrun for {}", test.name()).as_str());
+            if matches.get_flag("raw") {
+                write_results(&results, format!("/extern/results/{}-hot.raw.tsv", test.name())).expect(
+                    format!(
+                        "Failed while writing raw results of hot run {} to file",
+                        test.name()
+                    )
+                    .as_str(),
+                );
+            }
+            if matches.get_flag("aggregate") {
+                write_results_aggregated(
+                    &results,
+                    format!("/extern/results/{}-hot.aggregate.tsv", test.name()),
+                )
+                .expect(
+                    format!(
+                        "Failed while writing aggregate results of hot run {} to file",
+                        test.name()
+                    )
+                    .as_str(),
+                );
+            }
         }
         // Clean Up
         conn.close()
@@ -289,6 +322,21 @@ impl Connection {
         }
     }
 
+    pub fn cooldown(&mut self) -> () {
+        return match self {
+            Connection::QLever(connection) => {
+                connection.cooldown();
+            }
+            #[cfg(feature = "duckdb")]
+            Connection::DuckDB(connection) => {
+                connection.cooldown()
+            }
+            Connection::PostGres(connection) => {
+                connection.cooldown()
+            }
+        }
+    }
+
     pub fn close(self) -> Result<(), Box<dyn Error>> {
         match self {
             Connection::QLever(connection) => {
@@ -324,13 +372,27 @@ fn run_test(
     filename: &String,
     iterations: usize,
     connection: &mut Connection,
+    hotrun: bool,
 ) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
     let mut results: Vec<Vec<u128>> = vec![Vec::new(); queries.len()];
+
+    if hotrun {
+        // Warm up the database
+        for _ in 0..5 {
+            for (id, record) in queries.iter().enumerate() {
+                let _ = connection.run_test_query(record);
+            }
+        }
+    }
+
     for _ in 0..iterations {
-        clear_cache().expect("Failed to clear cache");
         // Run Queries
         for (id, record) in queries.iter().enumerate() {
+            if !hotrun {
+                connection.cooldown();
+                clear_cache().unwrap();
+            }
             let result = connection.run_test_query(record);
             results[id].push(result)
         }
@@ -349,11 +411,18 @@ fn run_test(
 
 fn clear_cache() -> Result<(), Box<dyn Error>> {
     // Clear Cache
-    let _ = Command::new("bash")
+    let out = Command::new("bash")
         .arg("-c")
-        .arg("sync; sleep 5; echo 3 > /proc/sys/vm/drop_caches")
-        .output()
-        .unwrap();
+        .arg("sync; echo 3 > /proc/sys/vm/drop_caches")
+        .output()?;
+
+    if !out.status.success() {
+        return Err(format!(
+            "drop_caches failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ).into());
+    }
+
     Ok(())
 }
 

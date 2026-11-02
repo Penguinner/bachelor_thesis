@@ -105,6 +105,11 @@ impl PostgresConnection {
         Ok(conn)
     }
 
+    pub fn cooldown(&mut self) -> () {
+        let docker = Docker::connect_with_defaults().unwrap();
+        docker.restart_container("postgres", None);
+    }
+
     fn insert_osm_data(&self) {
         let dataset_parts: Vec<&str> = self.dataset.split(" ").collect();
         let country = dataset_parts[2];

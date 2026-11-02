@@ -14,7 +14,7 @@ pub struct DuckDBConnection {
 impl DuckDBConnection {
     pub fn new(dataset: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
         let dataset_parts: Vec<&str> = dataset.split(" ").collect();
-        let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset .to_string() };
+        let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset.to_string() };
         // TODO Add more datasets
         match dataset_parts[0] {
             "dblp" => {
@@ -30,6 +30,15 @@ impl DuckDBConnection {
 
         conn.activate_profiling();
         Ok(conn)
+    }
+
+    pub fn cooldown(&mut self) -> () {
+        drop(self.connection.take());
+        self.connection = Connection::open("db.duckdb").unwrap();
+        self.activate_profiling();
+        if (self.dataset.contains("osm")) {
+            self.load_spatial_module();
+        }
     }
 
     fn activate_profiling(&mut self) {
