@@ -202,7 +202,8 @@ impl QLeverConnection {
             docker_id: format!("qlever.server.{name}")
         };
         // Test connection
-        wait_for_connect(conn,format!( "http://127.0.0.1:{port}"));
+        let addr = format!("http://127.0.0.1:{port}").as_str();
+        wait_for_connect(conn, addr);
         conn
     }
     
@@ -395,7 +396,7 @@ fn wait_for_connect(conn: QLeverConnection,addr: &str) -> () {
                 panic!("Qlever at {addr} not ready after {timeout:?}")
             }
 
-            let sock_addr: SocketAddr = match addr.parse() {
+            let sock_addr: SocketAddr = match addr.parse::<SocketAddr>() {
                 Ok(mut it) => match it.next() {
                     Some(a) => a,
                     None => panic!("no address resolved for {addr}"),
