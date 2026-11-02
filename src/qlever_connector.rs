@@ -1,7 +1,10 @@
+use core::panic;
 use std::collections::HashMap;
+use std::net::{SocketAddr, TcpStream};
+use std::os::unix::net::SocketAddr;
 use reqwest::header;
 use serde::Deserialize;
-use std::fs;
+use std::{eprintln, fs};
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -200,22 +203,57 @@ impl QLeverConnection {
             docker_id: format!("qlever.server.{name}")
         };
         // Test connection
-        let test_request = "SELECT * WHERE {?s ?p ?o} LIMIT 1";
-        let mut times = 0;
-        while times < 12 {
-            let result = conn.do_query_request(test_request);
-            match result {
-                Ok(_) => {
-                    return conn;
-                }
-                Err(e) => {
-                    times += 1;
-                    print!("{}", e);
-                    sleep(Duration::from_secs(5))
+        wait_for_connect(format!("http://127.0.0.1:{port}"));
+        conn
+    }
+
+    fn wait_for_connect(addr: &str) -> () {
+        let timeout = Duration::from_secs(600);
+        let start = Instant::now();
+        let mut attempts: u64 = 0;
+        loop {
+            let remaining = timeout.saturating_sub(start.elapsed());
+            if remaining.is_zero() {
+                panic!("Qlever at {addr} not ready after {timeout:?}")
+            }
+
+            let sock_addr: SocketAddr = match addr.to_socket_addrs() {
+                Ok(mut it) => match it.next() {
+                    Some(a) => a,
+                    None => panic!("no address resolved for {addr}"),
+                },
+                Err(e) => panic!("resolve {addr} : {e}"),
+            };
+
+            let tcp_ok = TcpStream::connect_timeout(&sock_addr, remaining.min(Duration::from_secs(2))).is_ok();
+
+            if tcp_ok {
+                let result = conn.do_query_request("SELECT * WHERE {?s ?p ?o} LIMIT 1");
+                match result {
+                    Ok(_) => {
+                        return ();
+                    }
+                    Err(e) => {
+                        eprintln!("Failure during HTTP request: {:?}", e);
+                    }
                 }
             }
+
+            let backoff_ms = std::cmp::min(
+                200u64 << (attempt-1).min(4), 
+                3000
+            );
+            let sleep_for = Duration::from_millis(backoff_ms.min(remaining.as_millis() as u64));
+
+            eprintln!(
+                "[ waiting for qlever ] attempt {attempts} tcp_ok={tcp_ok}, \
+                elapsed={:?}, retrying in {:?}",
+                start.elapsed(),
+                sleep_for,
+            );
+            sleep(sleep_for);
         }
-        panic!("Qlever couldn't be reached");
+
     }
     
     pub fn stop(&self) -> Result<(), Box<dyn Error>> {
@@ -264,13 +302,13 @@ impl QLeverConnection {
             .build()
             .unwrap();
         let query = query.to_string();
-        let res = client.post(format!("http://127.0.0.1:{port}/"))
+        let res = client.post(format!("http://127.0.0.1:{port}"))
             .headers(headers)
             .body(query)
             .send();
         
         if let Err(e) = res {
-            return Err(e.into());
+            return Err(e.to_string().into());
         }
         
         let result: JsonResult = res.unwrap().json::<JsonResult>().expect("deserialize query result failed");
