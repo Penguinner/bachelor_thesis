@@ -26,7 +26,7 @@ impl QLeverConnection {
         println!("Finished Setup Config");
         qlever_file.replace_internal_variables();
         // Create directory
-        fs::create_dir(format!("/data/{}", qlever_file.data.get("NAME").unwrap()).as_str())?;
+        fs::create_dir(format!("/extern/data/{}", qlever_file.data.get("NAME").unwrap()).as_str())?;
         QLeverConnection::get_data(&qlever_file);
         println!("Finished Fetching Data");
         QLeverConnection::index(&qlever_file);
@@ -86,21 +86,21 @@ impl QLeverConnection {
     fn get_data(qlever_file: &QleverFile) {
         command_assist("bash",
                        &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()],
-                       format!("/data/{}", qlever_file.data.get("NAME").unwrap()).as_str()
+                       format!("/extern/data/{}", qlever_file.data.get("NAME").unwrap()).as_str()
         ).unwrap();
     }
     
     fn index(qlever_file: &QleverFile) {
         // create settings json
         let name = qlever_file.data.get("NAME").unwrap().as_str();
-        let path = format!("/data/{name}/{name}.settings.json");
+        let path = format!("/extern/data/{name}/{name}.settings.json");
         let mut file = File::create(path.clone()).unwrap();
         file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().replace("\'","\"").as_bytes()).unwrap();
         // Create Index
         let mut command = format!{
             "docker run --rm -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
-            -v /data/{name}:/index \
+            -v ~/extern/data/{name}:/index \
             -w /index \
             --name qlever.index.{name} \
             --init \
@@ -116,13 +116,13 @@ impl QLeverConnection {
             vocab = vocabulary;
         }
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
-            command += format!("IndexBuilderMain \
+            command += format!("index_binary \
             -i {name} \
             -s {name}.settings.json \
             --vocabulary-type {vocab}").as_str();
             let multi_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap().as_str();
             let json: Value = serde_json::from_str(&multi_json.replace("\'","\"").as_str()).unwrap();
-            let glob_cmd = format!("/data/{name}/{0}", json["for-each"].as_str().unwrap());
+            let glob_cmd = format!("/extern/data/{name}/{0}", json["for-each"].as_str().unwrap());
             for file in glob(glob_cmd.as_str()).unwrap() {
                 let file_path = file.unwrap();
                 let file_name = file_path.file_name().unwrap().to_str().unwrap();
@@ -134,7 +134,7 @@ impl QLeverConnection {
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
             
             command += format!(
-                "| IndexBuilderMain \
+                "| index_binary \
                 -i {name} \
                 -s {name}.settings.json \
                 --vocabulary-type {vocab} -F ttl -f - \
@@ -170,13 +170,13 @@ impl QLeverConnection {
             "docker run -d --restart=unless-stopped \
             -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
-            -v /data/{name}:/index \
+            -v ~/extern/data/{name}:/index \
             -p {port}:{port} \
             -w /index \
             --name qlever.server.{name} \
             --init \
             --entrypoint bash \
-            docker.io/adfreiburg/qlever:latest -c 'ServerMain -i {name} -j 8 -p {port}"
+            docker.io/adfreiburg/qlever:latest -c 'server_binary -i {name} -j 8 -p {port}"
         );
         if let Some(q_mem) = qlever_file.server.get("MEMORY_FOR_QUERIES") {
             command += format!(" -m {q_mem}").as_str();
@@ -253,7 +253,7 @@ impl QLeverConnection {
             .write(true)
             .create(true)
             .append(true)
-            .open(format!("/data/qlever.{}.log", name))
+            .open(format!("/extern/data/qlever.{}.log", name))
             .unwrap();
         let _ = file.write(
             format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, result.0, result.2, result.1).as_bytes()

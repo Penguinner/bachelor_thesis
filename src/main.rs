@@ -24,18 +24,18 @@ mod parser;
 mod postgres_connector;
 mod qlever_connector;
 
-const VENUE_FILE: &str = "/data/venues.tsv";
-const PUBLISHER_FILE: &str = "/data/publishers.tsv";
-const EDITOR_FILE: &str = "/data/editors.tsv";
-const AUTHOR_FILE: &str = "/data/authors.tsv";
-const PUBLICATION_FILE: &str = "/data/publications.tsv";
-const RESOURCES_FILE: &str = "/data/resources.tsv";
-const PUBLICATION_EDITOR_FILE: &str = "/data/publication_editors.tsv";
-const REFERENCE_FILE: &str = "/data/references.tsv";
-const PUBLICATION_AUTHORS_FILE: &str = "/data/publication_authors.tsv";
-const AUTHOR_WEBSITES_FILE: &str = "/data/authors_website.tsv";
-const AFFILIATIONS_FILE: &str = "/data/affiliations.tsv";
-const ALIAS_FILE: &str = "/data/aliases.tsv";
+const VENUE_FILE: &str = "/extern/data/venues.tsv";
+const PUBLISHER_FILE: &str = "/extern/data/publishers.tsv";
+const EDITOR_FILE: &str = "/extern/data/editors.tsv";
+const AUTHOR_FILE: &str = "/extern/data/authors.tsv";
+const PUBLICATION_FILE: &str = "/extern/data/publications.tsv";
+const RESOURCES_FILE: &str = "/extern/data/resources.tsv";
+const PUBLICATION_EDITOR_FILE: &str = "/extern/data/publication_editors.tsv";
+const REFERENCE_FILE: &str = "/extern/data/references.tsv";
+const PUBLICATION_AUTHORS_FILE: &str = "/extern/data/publication_authors.tsv";
+const AUTHOR_WEBSITES_FILE: &str = "/extern/data/authors_website.tsv";
+const AFFILIATIONS_FILE: &str = "/extern/data/affiliations.tsv";
+const ALIAS_FILE: &str = "/extern/data/aliases.tsv";
 
 fn main() {
     // CLI Setup
@@ -118,7 +118,7 @@ fn main() {
         tests.push(Database::DuckDB);
     }
     
-    let _ = create_dir_all("/data");
+    let _ = create_dir_all("/extern/data");
 
     match data_set.split(" ").collect::<Vec<&str>>()[0].as_ref() {
         "dblp" =>
@@ -127,8 +127,8 @@ fn main() {
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
 
-                let _ = handle.block_on(download_dblp_data("/data/dblp.xml".into())).unwrap();
-                let mut parser = Parser::new("/data/dblp.xml");
+                let _ = handle.block_on(download_dblp_data("/extern/data/dblp.xml".into())).unwrap();
+                let mut parser = Parser::new("/extern/data/dblp.xml");
                 parser.run();
                 println!("Finished Parsing DBLP data");
             }
@@ -148,7 +148,7 @@ fn main() {
                     .build()
                     .unwrap();
                 let response = client.get(url).send().unwrap();
-                let file_path = format!("/data/{country}-latest.osm.pbf");
+                let file_path = format!("/extern/data/{country}-latest.osm.pbf");
                 let mut file = File::create(&file_path).unwrap();
                 file.write_all(&response.bytes().unwrap()).unwrap();
             }
@@ -165,7 +165,7 @@ fn main() {
                     .build()
                     .unwrap();
                 let response = client.get(url).send().unwrap();
-                let file_path = format!("/data/planet-latest.osm.pbf");
+                let file_path = format!("/extern/data/planet-latest.osm.pbf");
                 let mut file = File::create(&file_path).unwrap();
                 file.write_all(&response.bytes().unwrap()).unwrap();
             }

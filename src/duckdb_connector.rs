@@ -46,7 +46,7 @@ impl DuckDBConnection {
         let dataset_parts: Vec<&str> = self.dataset.split(" ").collect();
         let continent = dataset_parts[1];
         let country = dataset_parts[2];
-        let file_path = format!("/data/{country}-latest.osm.pbf");
+        let file_path = format!("/extern/data/{country}-latest.osm.pbf");
         let query = format!("CREATE TABLE osm AS SELECT * FROM ST_ReadOSM('{file_path}');");
         self.connection.execute(&query, []).unwrap();
     }
@@ -104,7 +104,7 @@ impl DuckDBConnection {
             .write(true)
             .create(true)
             .append(true)
-            .open(format!("/data/duckdb.{}.log", self.dataset))
+            .open(format!("/extern/data/duckdb.{}.log", self.dataset))
             .unwrap();
         let _ = file.write(
             format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, stmt.column_count(), stmt.row_count()).as_bytes()
