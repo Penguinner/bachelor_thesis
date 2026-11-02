@@ -31,7 +31,7 @@ impl DuckDBConnection {
         Ok(conn)
     }
 
-    pub fn cooldown(&mut self) -> DuckDBConnection {
+    pub fn cooldown(&mut self) -> () {
         self.connection.flush_prepared_statement_cache();
     }
 
