@@ -4,7 +4,6 @@ use std::error::Error;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::time::Instant;
 
 use crate::Dataset;
 
@@ -15,7 +14,7 @@ pub struct DuckDBConnection {
 
 impl DuckDBConnection {
     pub fn new(dataset: Dataset) -> Result<DuckDBConnection,  Box<dyn Error >> {
-        let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset };
+        let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset.clone() };
         // TODO Add more datasets
         match dataset {
             Dataset::Dblp => {
@@ -26,7 +25,6 @@ impl DuckDBConnection {
                 conn.load_spatial_module();
                 conn.load_osm_planet_data();
             }
-            _ => { return Err("dataset could not be resolved for duckdb Connection".into())}
         }
 
         conn.activate_profiling();
@@ -34,10 +32,10 @@ impl DuckDBConnection {
     }
 
     pub fn cooldown(&mut self) -> () {
-        drop(self.connection.take());
+        self.connection.close();
         self.connection = Connection::open("db.duckdb").unwrap();
         self.activate_profiling();
-        if self.dataset == Dataset::OsmPlanet {
+        if self.dataset.is_geo() {
             self.load_spatial_module();
         }
     }

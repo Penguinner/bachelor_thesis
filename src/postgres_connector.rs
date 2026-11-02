@@ -88,7 +88,7 @@ impl PostgresConnection {
         
         // Connect to Postgres DB
         let client = create_client();
-        let mut conn = PostgresConnection { client, dataset: dataset, docker_id: id};
+        let mut conn = PostgresConnection { client, dataset: dataset.clone(), docker_id: id};
         // TODO add more datasets
         match dataset {
             Dataset::Dblp => {
@@ -99,7 +99,6 @@ impl PostgresConnection {
                 let _ = conn.client.execute("CREATE EXTENSION postgis;", &[]);
                 conn.insert_osm_data();
             }
-            _ => { return Err("dataset could not be resolved for postgres Connection".into())}
         }
         println!("Finished creating Postgres client");
         Ok(conn)
@@ -111,9 +110,7 @@ impl PostgresConnection {
     }
 
     fn insert_osm_data(&self) {
-        let dataset_parts: Vec<&str> = self.dataset.split(" ").collect();
-        let country = dataset_parts[2];
-        let file_path = format!("/extern/data/{country}-latest.osm.pbf");
+        let file_path = format!("/extern/data/planet-latest.osm.pbf");
         let osm2pgsql = Command::new("bash")
         .args(["-c", format!("osm2pgsql -c -d database -U postgres -H 172.17.0.1 -P 5432 {file_path}").as_str()])
         .output()
@@ -180,7 +177,7 @@ impl PostgresConnection {
             .write(true)
             .create(true)
             .append(true)
-            .open(format!("/extern/data/postgres.{}.log", self.dataset))
+            .open(format!("/extern/data/postgres.{}.log", self.dataset.name()))
             .unwrap();
         let mut columns = 0;
         if let Some(row) = result.get(0) {

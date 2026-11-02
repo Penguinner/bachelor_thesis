@@ -56,10 +56,9 @@ impl QLeverConnection {
         let target = match dataset {
             Dataset::Dblp => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp",
             Dataset::OsmPlanet => "https://raw.githubusercontent.com/qlever-dev/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-planet",
-            _ => panic!("Invalid dataset"),
         };
         let response = reqwest::blocking::get(target).unwrap();
-        let mut content = response.text().unwrap();
+        let content = response.text().unwrap();
         let sanitizied = &Self::sanitize_toml(content);
         return toml::from_str::<QleverFile>(sanitizied).unwrap();
     }

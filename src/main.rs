@@ -242,8 +242,8 @@ pub struct Test {
 
 impl Test {
 
-    pub fn name(&self) -> &String {
-        let name = format!("{self.database.name()}-{self.dataset.name()}");
+    pub fn name(&self) -> String {
+        let name = format!("{}-{}", self.database.name(), self.dataset.name());
         name
     }
 }
