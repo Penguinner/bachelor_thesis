@@ -40,4 +40,4 @@ ENV RUST_BACKTRACE=1
 ENV PGPASSFILE="/usr/src/bachelor_thesis/.pgpass"
 
 #CMD ["bachelor_thesis", "-h"]
-CMD ["bachelor_thesis", "--osm-planet", "--dblp", "-q", "-p", "-d", "-r", "-a", "-h"]
+CMD ["bachelor_thesis", "--osm-planet", "--dblp", "-q", "-p", "-d", "-r", "-a", "--hot"]
