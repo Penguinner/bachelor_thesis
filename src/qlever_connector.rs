@@ -116,7 +116,7 @@ impl QLeverConnection {
             vocab = vocabulary;
         }
         if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
-            command += format!("index_binary \
+            command += format!("qlever-index \
             -i {name} \
             -s {name}.settings.json \
             --vocabulary-type {vocab}").as_str();
@@ -134,7 +134,7 @@ impl QLeverConnection {
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
             
             command += format!(
-                "| index_binary \
+                "| qlever-index \
                 -i {name} \
                 -s {name}.settings.json \
                 --vocabulary-type {vocab} -F ttl -f - \
@@ -176,7 +176,7 @@ impl QLeverConnection {
             --name qlever.server.{name} \
             --init \
             --entrypoint bash \
-            docker.io/adfreiburg/qlever:latest -c 'server_binary -i {name} -j 8 -p {port}"
+            docker.io/adfreiburg/qlever:latest -c 'qlever-server -i {name} -j 8 -p {port}"
         );
         if let Some(q_mem) = qlever_file.server.get("MEMORY_FOR_QUERIES") {
             command += format!(" -m {q_mem}").as_str();
