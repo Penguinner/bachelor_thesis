@@ -6,24 +6,25 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::time::Instant;
 
+use crate::Dataset;
+
 pub struct DuckDBConnection {
     connection: Connection,
-    dataset: String,
+    dataset: Dataset,
 }
 
 impl DuckDBConnection {
-    pub fn new(dataset: &String) -> Result<DuckDBConnection,  Box<dyn Error >> {
-        let dataset_parts: Vec<&str> = dataset.split(" ").collect();
-        let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset.to_string() };
+    pub fn new(dataset: Dataset) -> Result<DuckDBConnection,  Box<dyn Error >> {
+        let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset };
         // TODO Add more datasets
-        match dataset_parts[0] {
-            "dblp" => {
+        match dataset {
+            Dataset::Dblp => {
                 conn.create_tables_dblp();
                 conn.insert_dblp_data();
             },
-            "osm-country" => {
+            Dataset::OsmPlanet => {
                 conn.load_spatial_module();
-                conn.load_osm_country_data();
+                conn.load_osm_planet_data();
             }
             _ => { return Err("dataset could not be resolved for duckdb Connection".into())}
         }
@@ -36,7 +37,7 @@ impl DuckDBConnection {
         drop(self.connection.take());
         self.connection = Connection::open("db.duckdb").unwrap();
         self.activate_profiling();
-        if (self.dataset.contains("osm")) {
+        if self.dataset == Dataset::OsmPlanet {
             self.load_spatial_module();
         }
     }
@@ -51,11 +52,8 @@ impl DuckDBConnection {
         self.connection.execute("LOAD spatial;", []).unwrap();
     }
 
-    fn load_osm_country_data(&mut self) {
-        let dataset_parts: Vec<&str> = self.dataset.split(" ").collect();
-        let continent = dataset_parts[1];
-        let country = dataset_parts[2];
-        let file_path = format!("/extern/data/{country}-latest.osm.pbf");
+    fn load_osm_planet_data(&mut self) {
+        let file_path = format!("/extern/data/planet-latest.osm.pbf");
         let query = format!("CREATE TABLE osm AS SELECT * FROM ST_ReadOSM('{file_path}');");
         self.connection.execute(&query, []).unwrap();
     }
@@ -104,7 +102,6 @@ impl DuckDBConnection {
 
     pub fn run_test_query(&self, query: &str) -> u128 {
         let mut stmt = self.connection.prepare(query).unwrap();
-        let now = Instant::now();
         let _ = stmt.query(params![]).unwrap();
         let profiling = self.connection.get_profiling_info().expect("profiling should be enabled");
         let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
@@ -113,7 +110,7 @@ impl DuckDBConnection {
             .write(true)
             .create(true)
             .append(true)
-            .open(format!("/extern/data/duckdb.{}.log", self.dataset))
+            .open(format!("/extern/data/duckdb.{}.log", self.dataset.name()))
             .unwrap();
         let _ = file.write(
             format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, stmt.column_count(), stmt.row_count()).as_bytes()

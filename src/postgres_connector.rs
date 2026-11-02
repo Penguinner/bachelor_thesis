@@ -1,6 +1,6 @@
-use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
+use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, Dataset, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
-use bollard::query_parameters::CreateContainerOptionsBuilder;
+use bollard::query_parameters::{CreateContainerOptionsBuilder, RestartContainerOptions};
 use bollard::Docker;
 use futures::TryStreamExt;
 use postgres::{Client, NoTls, Row};
@@ -15,13 +15,13 @@ use std::process::Command;
 
 pub struct PostgresConnection {
     client: Client,
-    dataset: String,
+    dataset: Dataset,
     docker_id: String,
 }
 
 impl PostgresConnection {
 
-    pub fn new(dataset: &String) -> Result<Self, Box<dyn Error>> {
+    pub fn new(dataset: Dataset) -> Result<Self, Box<dyn Error>> {
         // Startup Docker container
         let rt = Runtime::new()?;
         let handle = rt.handle();
@@ -29,7 +29,7 @@ impl PostgresConnection {
             let docker = Docker::connect_with_defaults().unwrap();
             let mut image = "postgres:latest";
 
-            if dataset.contains("osm") {
+            if dataset.is_geo() {
                 image = "postgis/postgis:18-3.6";
             }
 
@@ -88,14 +88,14 @@ impl PostgresConnection {
         
         // Connect to Postgres DB
         let client = create_client();
-        let mut conn = PostgresConnection { client, dataset: dataset.into(), docker_id: id};
+        let mut conn = PostgresConnection { client, dataset: dataset, docker_id: id};
         // TODO add more datasets
-        match dataset.split(" ").collect::<Vec<&str>>()[0] {
-            "dblp" => {
+        match dataset {
+            Dataset::Dblp => {
                 conn.create_tables_dblp();
                 conn.insert_dblp_data();
             },
-            "osm-country" => {
+            Dataset::OsmPlanet => {
                 let _ = conn.client.execute("CREATE EXTENSION postgis;", &[]);
                 conn.insert_osm_data();
             }
@@ -107,7 +107,7 @@ impl PostgresConnection {
 
     pub fn cooldown(&mut self) -> () {
         let docker = Docker::connect_with_defaults().unwrap();
-        docker.restart_container("postgres", None);
+        docker.restart_container("postgres", Some(RestartContainerOptions::default()));
     }
 
     fn insert_osm_data(&self) {

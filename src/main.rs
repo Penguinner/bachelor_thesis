@@ -168,13 +168,14 @@ fn main() {
     for test in tests {
         clear_cache().expect("Failed to clear cache");
         let name = test.name();
+        let query_file = test.dataset.get_query_file();
         println!("Start of Test: {}", name);
         // Create Connection and insert Data
         let mut conn = test.db
-            .to_connection(&data_set.to_string())
+            .to_connection(test.dataset)
             .expect(format!("Failed to create connection for {}", name).as_str());
         // Run Queries
-        let results = run_test(test.dataset.get_query_file(), iter, &mut conn, false)
+        let results = run_test(&query_file, iter, &mut conn, false)
             .expect(format!("Failed while testing coldrun for {}", name).as_str());
         // Save Results
         let _ = create_dir_all("/extern/results");
@@ -201,7 +202,7 @@ fn main() {
             );
         }
         if matches.get_flag("hot") {
-            let hot_results = run_test(&queries, iter, &mut conn, true)
+            let hot_results = run_test(&query_file, iter, &mut conn, true)
                 .expect(format!("Failed while testing hotrun for {}", name).as_str());
             if matches.get_flag("raw") {
                 write_results(&results, format!("/extern/results/{}-hot.raw.tsv", name)).expect(
@@ -242,10 +243,12 @@ pub struct Test {
 impl Test {
 
     pub fn name(&self) -> &String {
-        self.db.name() + "-" + self.dataset.name()
+        let name = format!("{self.database.name()}-{self.dataset.name()}");
+        name
     }
 }
 
+#[derive(Clone)]
 enum Dataset {
     Dblp,
     OsmPlanet,
@@ -253,21 +256,29 @@ enum Dataset {
 
 impl Dataset {
 
-    pub fn get_query_file(&self) -> &String {
+    pub fn get_query_file(&self) -> String {
         match self {
-            Dataset::Dblp => &"dblp.tsv".to_string(),
-            Dataset::OsmPlanet => &"osm.tsv".to_string(),
+            Dataset::Dblp => "dblp.tsv".to_string(),
+            Dataset::OsmPlanet => "osm.tsv".to_string(),
         }
     }
 
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> String {
         match self {
-            Dataset::Dblp => &"DBLP".to_string(),
-            Dataset::OsmPlanet => &"OSM".to_string(),
+            Dataset::Dblp => "DBLP".to_string(),
+            Dataset::OsmPlanet => "OSM".to_string(),
+        }
+    }
+
+    pub fn is_geo(&self) -> bool {
+        match self {
+            Dataset::OsmPlanet => true,
+            _ => false
         }
     }
 }
 
+#[derive(Clone)]
 enum Database {
     QLever,
     #[cfg(feature = "duckdb")]
@@ -285,7 +296,7 @@ impl Database {
         }
     }
 
-    pub fn to_connection(&self, dataset: &String) -> Result<Connection, Box<dyn Error>> {
+    pub fn to_connection(&self, dataset: Dataset) -> Result<Connection, Box<dyn Error>> {
         match self {
             Database::QLever => Ok(Connection::QLever(QLeverConnection::new(dataset)?)),
             #[cfg(feature = "duckdb")]
@@ -398,7 +409,7 @@ fn run_test(
     if hotrun {
         // Warm up the database
         for _ in 0..5 {
-            for (id, record) in queries.iter().enumerate() {
+            for (_, record) in queries.iter().enumerate() {
                 let _ = connection.run_test_query(record);
             }
         }

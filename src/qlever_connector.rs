@@ -14,6 +14,8 @@ use regex::{Captures, Regex};
 use serde_json::Value;
 use tokio::runtime::Runtime;
 
+use crate::Dataset;
+
 pub struct QLeverConnection {
     docker_id: String,
     qlever_file: QleverFile
@@ -21,7 +23,7 @@ pub struct QLeverConnection {
 
 impl QLeverConnection {
     
-    pub fn new(dataset: &String) -> Result<QLeverConnection, Box<dyn Error>> {
+    pub fn new(dataset: Dataset) -> Result<QLeverConnection, Box<dyn Error>> {
         let mut qlever_file = QLeverConnection::setup_config(dataset);
         println!("Finished Setup Config");
         qlever_file.replace_internal_variables();
@@ -46,43 +48,20 @@ impl QLeverConnection {
         let res = client.get(format!("http://127.0.0.1:{port}/?cmd=clear-cache-complete&access-token=benchmark"))
             .send();
         if let Err(e) = res {
-            panic!(e)
+            panic!("{}", e)
         }
     }
     
-    fn setup_config(dataset: &String) -> QleverFile {
-        let dataset_parts: Vec<&str> = dataset.split(" ").collect();
-        let target = match dataset_parts[0] {
-            "dblp" => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp",
-            "osm-country" => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-country",
-            "osm-planet" => "https://raw.githubusercontent.com/qlever-dev/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-planet",
+    fn setup_config(dataset: Dataset) -> QleverFile {
+        let target = match dataset {
+            Dataset::Dblp => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp",
+            Dataset::OsmPlanet => "https://raw.githubusercontent.com/qlever-dev/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-planet",
             _ => panic!("Invalid dataset"),
         };
         let response = reqwest::blocking::get(target).unwrap();
         let mut content = response.text().unwrap();
-        content = Self::extra_args(dataset_parts, &content);
         let sanitizied = &Self::sanitize_toml(content);
         return toml::from_str::<QleverFile>(sanitizied).unwrap();
-    }
-
-    fn extra_args(dataset_parts: Vec<&str>, content: &String) -> String {
-        if dataset_parts.len() == 1 {
-            return content.to_string()
-        }
-        match dataset_parts[0] {
-            "osm-country" => {
-                let continent = dataset_parts[1];
-                let continent_str = format!("CONTINENT = {continent}");
-                let country = dataset_parts[2];
-                let country_str = format!("COUNTRY = {country}");
-                let continent_regex = Regex::new(r"CONTINENT\s*=\s(europe)").unwrap();
-                let country_regex = Regex::new(r"COUNTRY\s*=\s(switzerland)").unwrap();
-                let mut new_content = continent_regex.replace(content.as_str(), continent_str).to_string();
-                new_content = country_regex.replace(new_content.as_str(), country_str).to_string();
-                return new_content
-            }
-            _ => unimplemented!()
-        }
     }
 
     fn sanitize_toml(string: String) -> String {
@@ -237,9 +216,7 @@ impl QLeverConnection {
                 }
             }
         }
-
         panic!("Qlever couldn't be reached");
-        conn // dummy return cant be reached
     }
     
     pub fn stop(&self) -> Result<(), Box<dyn Error>> {
