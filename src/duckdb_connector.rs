@@ -105,25 +105,35 @@ impl DuckDBConnection {
     }
 
     /// Runs a test query on duckdb database
-    pub fn run_test_query(&self, query: &str) -> u128 {
+    pub fn run_test_query(&self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Execute the query
-        let mut stmt = self.connection.prepare(query).unwrap();
-        let _ = stmt.query(params![]).unwrap();
+        let mut stmt = self.connection.prepare(query)?;
+        let response: Result<Row<'_>> = stmt.query(params![]);
         // Get timing info from profiling
         let profiling = self.connection.get_profiling_info().expect("profiling should be enabled");
         let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
         let duration = (duration_secs * 1000.0).round() as u128;
         // Write query result info to log
+        let result: Result<u128>;
+        let logmsg: String = match response {
+            Ok(_) => {
+                result = Ok(duration);
+                return format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, stmt.column_count(), stmt.row_count())
+            },
+            Err(e) => {
+                result = Err(e);
+                return format!("Query: {0} failed\n {e}", query, e)
+            }
+        };
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
             .open(format!("/extern/data/duckdb.{}.log", self.dataset.name()))
             .unwrap();
-        let _ = file.write(
-            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, stmt.column_count(), stmt.row_count()).as_bytes()
-        );
-        duration
+        let _ = file.write(logmsg.as_bytes());
+
+        result
     }
     
     /// Close Connection and delete the database file

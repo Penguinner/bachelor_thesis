@@ -277,11 +277,22 @@ impl QLeverConnection {
     }
 
     /// Run a test query on QLever
-    pub fn run_test_query(&mut self, query: &str) -> u128 {
-        // Run query
-        let result: (u128, usize, usize) = self.do_query_request(query).expect("query failed");
-        // Write results to log
+    pub fn run_test_query(&mut self, query: &str) -> Result<u128 , Box<dyn Error>> {
         let name = self.qlever_file.data.get("NAME").unwrap().as_str();
+        // Run query
+        let response = self.do_query_request(query);
+        // Write results to log
+        let mut result: Result<u128>;
+        let logmsg: String = match response {
+            Ok((time,rows, columns)) => {
+                result = Ok(time);
+                return format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, time, columns, rows)
+            },
+            Err(e) => {
+                result = Err(e);
+                return format!("Query: {0} failed\n{1}", query, e)
+            }
+        };
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -289,9 +300,10 @@ impl QLeverConnection {
             .open(format!("/extern/data/qlever.{}.log", name))
             .unwrap();
         let _ = file.write(
-            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, result.0, result.2, result.1).as_bytes()
+            logmsg.as_bytes()
         );
-        result.0
+        
+        result
     }
     
     /// Make a request to the QLever server with a query

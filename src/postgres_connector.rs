@@ -176,15 +176,15 @@ impl PostgresConnection {
     }
     
     /// Run a test query on the PostgreSQL database.
-    pub fn run_test_query(&mut self, query: &str) -> u128 {
+    pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Recreate client if connection was closed
         if self.client.is_closed() {
             self.client = create_client();
         }
         // Execute Query
-        let stmt = self.client.prepare(query).unwrap();
+        let stmt = self.client.prepare(query)?;
         let now = Instant::now();
-        let result : Vec<Row> = self.client.query(&stmt, &[]).unwrap();
+        let response = self.client.query(&stmt, &[]);
         let duration = now.elapsed().as_millis();
         // Write Result info to log
         let mut file = OpenOptions::new()
@@ -193,16 +193,25 @@ impl PostgresConnection {
             .append(true)
             .open(format!("/extern/data/postgres.{}.log", self.dataset.name()))
             .unwrap();
-        // Get columns from first row
-        let mut columns = 0;
-        if let Some(row) = result.get(0) {
-            columns = row.len();
-        }
-        let _ = file.write(
-            format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}\n", query, duration, columns, result.len()).as_bytes()
-        );
+        let mut result: Result<u128>;
+        let logmsg: String = match response {
+            Ok(data) => {
+                // Get columns from first row
+                let mut columns = 0;
+                if let Some(row) = data.get(0) {
+                    columns = row.len();
+                }
+                result = Ok(duration);
+                return format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}\n", query, duration, columns, data.len())
+            },
+            Err(e) => {
+                result = Err(e.into());
+                return format!("Query: {0} failed\n{1}", query, e)
+            }
+        };
+        let _ = file.write(logmsg.as_bytes());
         
-        duration
+        result
     }
     
     // Close connection by stopping and removing the container.

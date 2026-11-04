@@ -365,7 +365,7 @@ impl Connection {
 
     /// Runs a test for a given [`TSVRecord`] expressing a query.
     /// Passes test query parameters to connection.
-    pub fn run_test_query(&mut self, record: &TSVRecord) -> u128 {
+    pub fn run_test_query(&mut self, record: &TSVRecord) -> Result<u128, Box<dyn Error>> {
         match self {
             #[cfg(feature = "duckdb")]
             Connection::DuckDB(connection) => connection.run_test_query(record.duckdb.as_ref()),
@@ -417,16 +417,31 @@ pub struct TestResult {
     id: usize,
     /// Vector of time results in ms.
     results: Vec<u128>,
+    failures: usize,
 }
 
 impl TestResult {
+
+    /// Create new TestResult
+    pub fn new(id: usize) -> TestResult {
+        TestResult { id, results: Vec::new(), failures: 0 }
+    }
 
     /// Converts itself into a Vector of Strings
     pub fn to_string_list(&self) -> Vec<String> {
         let mut results: Vec<String> = Vec::new();
         results.push(self.id.to_string());
+        results.push(self.failures.to_string());
         results.append(&mut self.results.iter().map(|x| x.to_string()).collect());
         results
+    }
+
+    pub fn add_time(&self, time: u128) {
+        self.results.push(time);
+    }
+
+    pub fn inc_failures(&self) -> () {
+        self.failures += 1;
     }
 }
 
@@ -444,7 +459,7 @@ fn run_test(
 ) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
     // Initialize 2D Vector for results
-    let mut results: Vec<Vec<u128>> = vec![Vec::new(); queries.len()];
+    let mut results: Vec<TestResult> = (0..queries.len()).map(|id| TestResult::new(id)).collect();
 
     if hotrun {
         // Warm up the database
@@ -463,18 +478,16 @@ fn run_test(
                 clear_cache().unwrap();
             }
             let result = connection.run_test_query(record);
-            results[id].push(result)
+            match result {
+                Ok(time) => {
+                    results[id].add_time(time);
+                },
+                Err(_) => {
+                    results[id].inc_failures();
+                }
+            }
         }
     }
-    // Covert results to TestResult
-    let results = results
-        .iter()
-        .enumerate()
-        .map(|(index, value)| TestResult {
-            id: index,
-            results: value.clone(),
-        })
-        .collect();
 
     Ok(results)
 }
