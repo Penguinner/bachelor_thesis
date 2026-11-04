@@ -1,6 +1,5 @@
 use core::panic;
 use std::collections::HashMap;
-use std::net::{SocketAddr, TcpStream};
 use reqwest::header;
 use serde::Deserialize;
 use std::{eprintln, fs};
@@ -202,7 +201,6 @@ impl QLeverConnection {
             docker_id: format!("qlever.server.{name}")
         };
         // Test connection
-        let addr = format!("127.0.0.1:{port}");
         conn.wait_for_connect();
         conn
     }
@@ -295,12 +293,12 @@ impl QLeverConnection {
             .headers(headers)
             .body(query)
             .send();
-        let text = res.unwrap().text().unwrap();
         
         if let Err(e) = res {
             return Err(e.to_string().into());
         }
         
+        let text = res.unwrap().text().unwrap();
         let result: JsonResult = serde_json::from_str(&text).expect("deserialize query result failed.");
         
         let time: u128 = result.time.total.chars()
