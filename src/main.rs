@@ -11,7 +11,7 @@ use serde::Deserialize;
 use std::time::Duration;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{File, create_dir_all};
+use std::fs::{File, create_dir_all, remove_dir_all};
 use std::io::Write;
 use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -240,6 +240,7 @@ fn main() {
         conn.close().expect(format!("Failed to close connection for {}", name).as_str());
         println!("End of Test: {}", name);
     }
+    clean_up();
     println!("Finished Tests");
 }
 
@@ -555,6 +556,10 @@ fn write_results_aggregated(
     }
 
     Ok(())
+}
+
+fn clean_up() -> () {
+    remove_dir_all("/extern/data/")?;
 }
 
 /// Downloads the xml GZIP archive for the dblp dataset.

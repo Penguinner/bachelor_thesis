@@ -317,10 +317,11 @@ impl QLeverConnection {
             .send()
             .unwrap_or_else(|error| {
                 panic!("Failed to unwrap response {error:?}")
-            });
+            })
+            .error_for_status();
         
-        // Check for http Erros
-        if let Err(err) = res.error_for_status(){
+        // Check for http Errors
+        if let Err(err) = res{
             return Err(err.into())
         }
 
