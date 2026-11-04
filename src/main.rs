@@ -436,11 +436,11 @@ impl TestResult {
         results
     }
 
-    pub fn add_time(&self, time: u128) {
+    pub fn add_time(&mut self, time: u128) {
         self.results.push(time);
     }
 
-    pub fn inc_failures(&self) -> () {
+    pub fn inc_failures(&mut self) -> () {
         self.failures += 1;
     }
 }

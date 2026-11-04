@@ -282,15 +282,16 @@ impl QLeverConnection {
         // Run query
         let response = self.do_query_request(query);
         // Write results to log
-        let mut result: Result<u128>;
-        let logmsg: String = match response {
+        let mut result: Result<u128, Box<dyn Error>>;
+        let logmsg: String;
+        match response {
             Ok((time,rows, columns)) => {
                 result = Ok(time);
-                return format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, time, columns, rows)
+                logmsg = format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, time, columns, rows);
             },
             Err(e) => {
                 result = Err(e);
-                return format!("Query: {0} failed\n{1}", query, e)
+                logmsg = format!("Query: {0} failed\n{1}", query, e);
             }
         };
         let mut file = OpenOptions::new()

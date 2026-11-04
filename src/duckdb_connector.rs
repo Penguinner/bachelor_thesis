@@ -1,5 +1,5 @@
 use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
-use duckdb::{params, Connection};
+use duckdb::{params, Connection, Row, Statement};
 use std::error::Error;
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -107,22 +107,23 @@ impl DuckDBConnection {
     /// Runs a test query on duckdb database
     pub fn run_test_query(&self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Execute the query
-        let mut stmt = self.connection.prepare(query)?;
-        let response: Result<Row<'_>> = stmt.query(params![]);
+        let mut stmt: Statement<'_> = self.connection.prepare(query)?;
+        let response: Result<Row<'_>, E> = stmt.query(params![]);
         // Get timing info from profiling
         let profiling = self.connection.get_profiling_info().expect("profiling should be enabled");
         let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
         let duration = (duration_secs * 1000.0).round() as u128;
         // Write query result info to log
-        let result: Result<u128>;
-        let logmsg: String = match response {
+        let result: Result<u128, Box<dyn Error>>;
+        let logmsg: String;
+        match response {
             Ok(_) => {
                 result = Ok(duration);
-                return format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, stmt.column_count(), stmt.row_count())
+                logmsg = format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, stmt.column_count(), stmt.row_count());
             },
             Err(e) => {
                 result = Err(e);
-                return format!("Query: {0} failed\n {e}", query, e)
+                logmsg = format!("Query: {0} failed\n {e}", query);
             }
         };
         let mut file = OpenOptions::new()
