@@ -287,6 +287,7 @@ impl QLeverConnection {
         let client = reqwest::blocking::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy()
+            .timeout(Duration::from_secs(600))
             .build()
             .unwrap();
         let query = query.to_string();
@@ -294,12 +295,13 @@ impl QLeverConnection {
             .headers(headers)
             .body(query)
             .send();
+        let text = res.unwrap().text().unwrap();
         
         if let Err(e) = res {
             return Err(e.to_string().into());
         }
         
-        let result: JsonResult = res.unwrap().json::<JsonResult>().expect("deserialize query result failed");
+        let result: JsonResult = serde_json::from_str(&text).expect("deserialize query result failed.");
         
         let time: u128 = result.time.total.chars()
             .take_while(|c| c.is_ascii_digit())
@@ -381,7 +383,7 @@ impl QleverFile {
 }
 
 
-// Response deserialization struct
+/// Response deserialization struct
 #[derive(Deserialize)]
 struct JsonResult {
     #[serde(rename = "runtimeInformation")]
@@ -391,6 +393,8 @@ struct JsonResult {
 
 #[derive(Deserialize)]
 struct JsonTime {
+    #[serde(rename = "computeResult")]
+    compute: String,
     total: String,
 }
 
