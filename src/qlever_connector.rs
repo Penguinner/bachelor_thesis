@@ -17,6 +17,7 @@ use tokio::runtime::Runtime;
 
 use crate::Dataset;
 
+/// Connection for QLever database
 pub struct QLeverConnection {
     docker_id: String,
     qlever_file: QleverFile
@@ -24,14 +25,18 @@ pub struct QLeverConnection {
 
 impl QLeverConnection {
     
+    /// Create a new [`QLeverConnection`]
     pub fn new(dataset: Dataset) -> Result<QLeverConnection, Box<dyn Error>> {
+        // Read Config for dataset
         let mut qlever_file = QLeverConnection::setup_config(dataset);
         println!("Finished Setup Config");
         qlever_file.replace_internal_variables();
-        // Create directory
+        // Create directory for dataset
         fs::create_dir(format!("/extern/data/{}", qlever_file.data.get("NAME").unwrap()).as_str())?;
+        // Get Data for dataset with qlever file command
         QLeverConnection::get_data(&qlever_file);
         println!("Finished Fetching Data");
+        // Start Indexing
         QLeverConnection::index(&qlever_file);
         println!("Finished Indexing");
         let conn = QLeverConnection::start(&qlever_file);
@@ -39,6 +44,7 @@ impl QLeverConnection {
         Ok(conn)
     }
 
+    /// Cooldown by using the clear-cache-complete command for qlever
     pub fn cooldown(&mut self) -> () {
         let port = self.qlever_file.server.get("PORT").unwrap().as_str();
         let client = reqwest::blocking::Client::builder()
@@ -53,22 +59,30 @@ impl QLeverConnection {
         }
     }
     
+    /// Get the QLeverfile from the qlever-control repository and parse it for our purpose
     fn setup_config(dataset: Dataset) -> QleverFile {
+        // Fetch File
         let target = match dataset {
             Dataset::Dblp => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp",
             Dataset::OsmPlanet => "https://raw.githubusercontent.com/qlever-dev/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-planet",
         };
         let response = reqwest::blocking::get(target).unwrap();
         let content = response.text().unwrap();
+        // Convert to QLeverfile struct
         let sanitizied = &Self::sanitize_toml(content);
         return toml::from_str::<QleverFile>(sanitizied).unwrap();
     }
 
+    /// Sanitize QLeverfile so it can be Deserialized without problem
     fn sanitize_toml(string: String) -> String {
+        // Regex Setup
         let comments = Regex::new(r"#\s.*\n?").unwrap();
         let jsons = Regex::new(r"=\s(.*)").unwrap();
+        // Remove Comments
         let mut new_toml = comments.replace_all(string.as_str(), "").to_string();
+        // Replace " with '
         new_toml = new_toml.as_str().replace("\"","\'").to_string();
+        // Wrap properties in "
         new_toml = jsons.replace_all(new_toml.as_str(), |caps: &Captures| {
             let word = caps[1].to_string();
             format!("= \"{word}\"")
@@ -76,6 +90,7 @@ impl QLeverConnection {
         new_toml.trim().to_string()
     }
     
+    /// Get Data for dataset defined by GET_DATA_CMD in QLeverfile
     fn get_data(qlever_file: &QleverFile) {
         command_assist("bash",
                        &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()],
@@ -83,6 +98,7 @@ impl QLeverConnection {
         ).unwrap();
     }
     
+    /// Start indexing for QLever
     fn index(qlever_file: &QleverFile) {
         // create settings json
         let name = qlever_file.data.get("NAME").unwrap().as_str();
@@ -108,7 +124,7 @@ impl QLeverConnection {
         if let Some(vocabulary) = qlever_file.index.get("VOCABULARY_TYPE") {
             vocab = vocabulary;
         }
-        if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
+        if qlever_file.index.contains_key("MULTI_INPUT_JSON") { // MULTI_INPUT_JSON Format
             command += format!("qlever-index \
             -i {name} \
             -s {name}.settings.json \
@@ -122,7 +138,7 @@ impl QLeverConnection {
                 let cmd = json["cmd"].as_str().unwrap().replace("{}", file_name);
                 command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str();
             }
-        } else {
+        } else { // CAT_INPUT Format
             command += qlever_file.index.get("CAT_INPUT_FILES").unwrap().as_str().replace("zcat", "ulimit -Sn 500000 && zcat").as_str();
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
             
@@ -141,24 +157,18 @@ impl QLeverConnection {
         }
 
         command += format!(" | tee /index/{name}.index-log.txt'").as_str();
+        // Execute Index command
         command_assist("bash", &["-c", command.as_str()], ".").unwrap()
     }
     
+
+    /// Start the QLever server
     fn start(qlever_file: &QleverFile) -> QLeverConnection {
-        // docker run -d --restart=unless-stopped
-        // -u $(id -u):$(id -g)
-        // -v /etc/localtime:/etc/localtime:ro
-        // -v $(pwd):/index
-        // -p 7015:7015
-        // -w /index
-        // --name qlever.server.dblp
-        // --init
-        // --entrypoint bash
-        // docker.io/adfreiburg/qlever:latest -c
-        // 'ServerMain -i dblp -j 8 -p 7015 -m 10G -c 5G -e 1G -k 200 -s 300s -a dblp_yGJxTdx6CXRb > dblp.server-log.txt 2>&1'
+        // Get name and port
         let name = qlever_file.data.get("NAME").unwrap().as_str();
         let port = qlever_file.server.get("PORT").unwrap().as_str();
 
+        // Parse the start command together from QLeverfile
         let mut command = format!(
             "docker run -d --restart=unless-stopped \
             -u $(id -u):$(id -g) \
@@ -195,6 +205,7 @@ impl QLeverConnection {
             command += format!(" -s {timeout}").as_str();
         }
         command += format!(" -a benchmark > /index/{name}.server-log.txt 2>&1'").as_str();
+        // Execute Start Command
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         let mut conn = QLeverConnection {
             qlever_file: qlever_file.clone(),
@@ -205,6 +216,7 @@ impl QLeverConnection {
         conn
     }
 
+    /// Tests if the QLever server is ready to receive queries
     fn wait_for_connect(&mut self) -> () {
         let timeout = Duration::from_secs(600);
         let start = Instant::now();
@@ -216,6 +228,7 @@ impl QLeverConnection {
                 panic!("Qlever at not ready after {timeout:?}")
             }
 
+            // Do Test request
             let result = self.do_query_request("SELECT * WHERE {?s ?p ?o} LIMIT 1");
             match result {
                 Ok(_) => {
@@ -226,6 +239,7 @@ impl QLeverConnection {
                 }
             }
 
+            // Increase Backoff time up to 3s
             let backoff_ms = std::cmp::min(
                 200u64 << (attempts-1).min(4), 
                 3000
@@ -242,6 +256,7 @@ impl QLeverConnection {
         }
     }
     
+    /// Stop the QLever docker container
     pub fn stop(&self) -> Result<(), Box<dyn Error>> {
         //Stop docker container
         let rt = Runtime::new().unwrap();
@@ -261,8 +276,11 @@ impl QLeverConnection {
         Ok(())
     }
 
+    /// Run a test query on QLever
     pub fn run_test_query(&mut self, query: &str) -> u128 {
+        // Run query
         let result: (u128, usize, usize) = self.do_query_request(query).expect("query failed");
+        // Write results to log
         let name = self.qlever_file.data.get("NAME").unwrap().as_str();
         let mut file = OpenOptions::new()
             .write(true)
@@ -276,12 +294,15 @@ impl QLeverConnection {
         result.0
     }
     
+    /// Make a request to the QLever server with a query
     fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
         let port = self.qlever_file.server.get("PORT").unwrap().as_str();
+        // Create Headers
         let mut headers = header::HeaderMap::new();
         headers.insert("Accept", "application/qlever-results+json".parse().unwrap());
         headers.insert("Content-type", "application/sparql-query".parse().unwrap());
 
+        // Create reqwest client 
         let client = reqwest::blocking::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy()
@@ -289,6 +310,7 @@ impl QLeverConnection {
             .build()
             .unwrap();
         let query = query.to_string();
+        // Do Post request with query
         let res = client.post(format!("http://127.0.0.1:{port}"))
             .headers(headers)
             .body(query)
@@ -297,13 +319,16 @@ impl QLeverConnection {
                 panic!("Failed to unwrap response {error:?}")
             });
         
+        // Check for http Erros
         if let Err(err) = res.error_for_status(){
             return Err(err.into())
         }
 
+        // Parse Result into JsonResult
         let text = res.text().unwrap();
         let result: JsonResult = serde_json::from_str(&text).expect("deserialize query result failed.");
         
+        // Convert time from "Xms" into integer
         let time: u128 = result.time.total.chars()
             .take_while(|c| c.is_ascii_digit())
             .collect::<String>()
@@ -314,6 +339,7 @@ impl QLeverConnection {
     }
 }
 
+/// Datastruct for converted QLeverfile 
 #[derive(Deserialize, Clone)]
 pub struct QleverFile {
     pub data: HashMap<String, String>,
@@ -324,6 +350,8 @@ pub struct QleverFile {
 }
 
 impl QleverFile {
+
+    /// Replaces variables inside the QLeverfile with the corresponding value
     pub fn replace_internal_variables(&mut self) {
         let regex = Regex::new(r"\$\{(?<prefix>\w+:)?(?<key>\w+)}").unwrap();
         // Iterate over Data
@@ -394,8 +422,6 @@ struct JsonResult {
 
 #[derive(Deserialize)]
 struct JsonTime {
-    #[serde(rename = "computeResult")]
-    compute: String,
     total: String,
 }
 
@@ -410,6 +436,7 @@ struct JsonQueryExecTree {
     result_rows: usize,
 }
 
+/// Utility function for executing commands in the right directory
 fn command_assist(command_str: &str, args: &[&str], current_dir: &str) -> Result<(), Box<dyn Error>> {
     let command = Command::new(command_str)
         .args(args)

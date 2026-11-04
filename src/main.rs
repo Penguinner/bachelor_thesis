@@ -25,6 +25,7 @@ mod parser;
 mod postgres_connector;
 mod qlever_connector;
 
+// Defines location for dblp parsed files.
 const VENUE_FILE: &str = "/extern/data/venues.tsv";
 const PUBLISHER_FILE: &str = "/extern/data/publishers.tsv";
 const EDITOR_FILE: &str = "/extern/data/editors.tsv";
@@ -112,9 +113,10 @@ fn main() {
                 .multiple(true)
         )
         .get_matches();
-
+    
     let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
-
+    
+    // Register database to be tested
     let mut dbs: Vec<Database> = Vec::new();
     if matches.get_flag("qlever") {
         dbs.push(Database::QLever);
@@ -127,6 +129,7 @@ fn main() {
         dbs.push(Database::DuckDB);
     }
 
+    // Create directory for storing temporary data
     let _ = create_dir_all("/extern/data");
 
     let mut datasets: Vec<Dataset> = Vec::new();
@@ -160,6 +163,7 @@ fn main() {
         }
     }
 
+    // Create cross join between datasets and databases
     let tests: Vec<Test> = iproduct!(dbs, datasets)
         .map(|(db, dataset)| Test {db, dataset})
         .collect();
@@ -179,6 +183,7 @@ fn main() {
             .expect(format!("Failed while testing coldrun for {}", name).as_str());
         // Save Results
         let _ = create_dir_all("/extern/results");
+        // Write raw results to a tsv file
         if matches.get_flag("raw") {
             write_results(&results, format!("/extern/results/{}.raw.tsv", name)).expect(
                 format!(
@@ -188,6 +193,7 @@ fn main() {
                 .as_str(),
             );
         }
+        // Write aggregated results to a tsv file
         if matches.get_flag("aggregate") {
             write_results_aggregated(
                 &results,
@@ -201,9 +207,11 @@ fn main() {
                 .as_str(),
             );
         }
+        // If hot flag is present do another run with no cache clearing or cooldown
         if matches.get_flag("hot") {
             let hot_results = run_test(&query_file, iter, &mut conn, true)
                 .expect(format!("Failed while testing hotrun for {}", name).as_str());
+            // Write hot raw results to a tsv file
             if matches.get_flag("raw") {
                 write_results(&hot_results, format!("/extern/results/{}-hot.raw.tsv", name)).expect(
                     format!(
@@ -213,6 +221,7 @@ fn main() {
                     .as_str(),
                 );
             }
+            // Write hot aggregated results to a tsv file
             if matches.get_flag("aggregate") {
                 write_results_aggregated(
                     &hot_results,
@@ -228,13 +237,13 @@ fn main() {
             }
         }
         // Clean Up
-        conn.close()
-            .expect(format!("Failed to close connection for {}", name).as_str());
+        conn.close().expect(format!("Failed to close connection for {}", name).as_str());
         println!("End of Test: {}", name);
     }
     println!("Finished Tests");
 }
 
+/// Struct storing info about the Performance Test
 pub struct Test {
     db: Database,
     dataset: Dataset
@@ -242,12 +251,14 @@ pub struct Test {
 
 impl Test {
 
+    /// Returns the name of the test, in the format "{database name}-{dataset name}".
     pub fn name(&self) -> String {
         let name = format!("{}-{}", self.db.name(), self.dataset.name());
         name
     }
 }
 
+/// Defines a dataset via the [`name`](Dataset::name) and [`get_query_file`](Dataset::get_query_file) function.
 #[derive(Clone)]
 enum Dataset {
     Dblp,
@@ -256,6 +267,7 @@ enum Dataset {
 
 impl Dataset {
 
+    /// Returns the corresponding query file to be used for the tests.
     pub fn get_query_file(&self) -> String {
         match self {
             Dataset::Dblp => "dblp.tsv".to_string(),
@@ -263,6 +275,7 @@ impl Dataset {
         }
     }
 
+    /// Returns name of the Dataset.
     pub fn name(&self) -> String {
         match self {
             Dataset::Dblp => "DBLP".to_string(),
@@ -270,6 +283,8 @@ impl Dataset {
         }
     }
 
+    /// Returns bool if the Dataset is spatial.
+    /// Needed by PostgreSQL and DuckDB for loading spatial modules on start.
     pub fn is_geo(&self) -> bool {
         match self {
             Dataset::OsmPlanet => true,
@@ -278,6 +293,8 @@ impl Dataset {
     }
 }
 
+/// Defines Database via [`name`](Database::name) function.
+/// Creates a corresponding [`Connection`] with [`to_connection`](Database::to_connection).
 #[derive(Clone)]
 enum Database {
     QLever,
@@ -287,6 +304,8 @@ enum Database {
 }
 
 impl Database {
+
+    // Returns name of database
     pub fn name(&self) -> &str {
         match self {
             Database::QLever => "qlever",
@@ -296,6 +315,8 @@ impl Database {
         }
     }
 
+    /// Returns corresponding [`Connection`] for dataset.
+    /// May return an Error if the connection establishment fails.
     pub fn to_connection(&self, dataset: Dataset) -> Result<Connection, Box<dyn Error>> {
         match self {
             Database::QLever => Ok(Connection::QLever(QLeverConnection::new(dataset)?)),
@@ -306,11 +327,7 @@ impl Database {
     }
 }
 
-pub enum QueryLang {
-    SQL,
-    SPARQL,
-}
-
+/// Defines structure of query file, in tsv format, to be read.
 #[derive(Debug, Deserialize)]
 pub struct TSVRecord {
     name: String,
@@ -320,6 +337,8 @@ pub struct TSVRecord {
     sparql: String,
 }
 
+/// Reads a tsv file into a [`Vec<TSVRecord>`].
+/// Returns an Error if the file doesn't match the format defined by [`TSVRecord`].
 fn read_test_file(filename: &str) -> Result<Vec<TSVRecord>, Box<dyn Error>> {
     let mut reader = ReaderBuilder::new()
         .delimiter(b'\t')
@@ -332,6 +351,8 @@ fn read_test_file(filename: &str) -> Result<Vec<TSVRecord>, Box<dyn Error>> {
     Ok(results)
 }
 
+/// Intermediate layer to unify different kind of Connections.
+/// Connections: [`DuckDBConnection`], [`PostgresConnection`], [`QLeverConnection`]
 pub enum Connection {
     #[cfg(feature = "duckdb")]
     DuckDB(DuckDBConnection),
@@ -340,6 +361,9 @@ pub enum Connection {
 }
 
 impl Connection {
+
+    /// Runs a test for a given [`TSVRecord`] expressing a query.
+    /// Passes test query parameters to connection.
     pub fn run_test_query(&mut self, record: &TSVRecord) -> u128 {
         match self {
             #[cfg(feature = "duckdb")]
@@ -351,6 +375,8 @@ impl Connection {
         }
     }
 
+    /// Resets connection in different ways to ensure a cold run.
+    /// Passes cooldown paramaters to connection.
     pub fn cooldown(&mut self) -> () {
         return match self {
             Connection::QLever(connection) => {
@@ -366,6 +392,7 @@ impl Connection {
         }
     }
 
+    /// Closes the connection.
     pub fn close(self) -> Result<(), Box<dyn Error>> {
         match self {
             Connection::QLever(connection) => {
@@ -383,13 +410,18 @@ impl Connection {
     }
 }
 
+/// Contains the results of the performance test.
 pub struct TestResult {
+    /// Index of the test executed.
     id: usize,
+    /// Vector of time results in ms.
     results: Vec<u128>,
 }
 
 impl TestResult {
-    pub fn to_tsv_record(&self) -> Vec<String> {
+
+    /// Converts itself into a Vector of Strings
+    pub fn to_string_list(&self) -> Vec<String> {
         let mut results: Vec<String> = Vec::new();
         results.push(self.id.to_string());
         results.append(&mut self.results.iter().map(|x| x.to_string()).collect());
@@ -397,6 +429,12 @@ impl TestResult {
     }
 }
 
+/// Runs a full test for a [`Connection`].
+/// * `filename` - Path to the query file.
+/// * `iterations` - How often the set of queries should be executed.
+/// * `connection` - Connection to which the queries should be send.
+/// * `hotrun` - Whether it is a hotrun, where no cooldown or cache reset is used and .
+/// Returns a [`Vec`]<[`TestResult`]>
 fn run_test(
     filename: &String,
     iterations: usize,
@@ -404,6 +442,7 @@ fn run_test(
     hotrun: bool,
 ) -> Result<Vec<TestResult>, Box<dyn Error>> {
     let queries = read_test_file(filename.as_str())?;
+    // Initialize 2D Vector for results
     let mut results: Vec<Vec<u128>> = vec![Vec::new(); queries.len()];
 
     if hotrun {
@@ -426,6 +465,7 @@ fn run_test(
             results[id].push(result)
         }
     }
+    // Covert results to TestResult
     let results = results
         .iter()
         .enumerate()
@@ -438,6 +478,7 @@ fn run_test(
     Ok(results)
 }
 
+/// Clears OS Cache by executing "sync; echo 3 > /proc/sys/vm/drop_caches".
 fn clear_cache() -> Result<(), Box<dyn Error>> {
     // Clear Cache
     let out = Command::new("bash")
@@ -455,6 +496,7 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Writes [`TestResult`]s to a tsv file.
 fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
@@ -462,12 +504,13 @@ fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<
         .from_writer(File::create(filename.as_str())?);
 
     for result in results {
-        writer.write_record(result.to_tsv_record())?;
+        writer.write_record(result.to_string_list())?;
     }
 
     Ok(())
 }
 
+/// Aggregates [`TestResult`]s to min, median, mode, avg, max, 1st and 3rd quartile and writes it into a tsv file.
 fn write_results_aggregated(
     results: &Vec<TestResult>,
     filename: String,
@@ -477,7 +520,8 @@ fn write_results_aggregated(
         .has_headers(true)
         .from_writer(File::create(filename.as_str())?);
 
-    writer.write_record(&["id", "min", "median", "mode", "avg", "max"])?;
+    // Write header
+    writer.write_record(&["id", "min", "1st-quartile", "median", "3rd-quartile", "mode", "avg", "max"])?;
     // Aggregate
     for result in results {
         let mut numbers = result.results.clone();
@@ -485,7 +529,9 @@ fn write_results_aggregated(
         let avg: f64 = numbers.iter().sum::<u128>() as f64 / numbers.len() as f64;
         let min = numbers.first().unwrap();
         let max = numbers.last().unwrap();
+        let quart_1 = numbers[numbers.len()/4];
         let median = numbers[numbers.len() / 2];
+        let quart_3 = numbers[numbers.len()*3/4];
         let mut occurences = HashMap::new();
         let mode = numbers
             .iter()
@@ -499,7 +545,9 @@ fn write_results_aggregated(
         writer.write_record(&[
             result.id.to_string(),
             min.to_string(),
+            quart_1.to_string(),
             median.to_string(),
+            quart_3.to_string(),
             mode.to_string(),
             avg.to_string(),
             max.to_string(),
@@ -509,6 +557,7 @@ fn write_results_aggregated(
     Ok(())
 }
 
+/// Downloads the xml GZIP archive for the dblp dataset.
 async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
     let url = "https://dblp.org/xml/dblp.xml.gz";
 
@@ -541,3 +590,9 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+}

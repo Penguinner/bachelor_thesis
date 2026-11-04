@@ -11,6 +11,7 @@ use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::BufReader;
 
+/// Parser for parsing the DBLP xml data into a SQL structure
 pub struct Parser {
     reader: Reader<BufReader<File>>,
     next_venue_id: usize,
@@ -30,6 +31,8 @@ pub struct Parser {
 }
 
 impl Parser {
+
+    /// Create a new Parser for a file.
     pub fn new(file: &str) -> Parser {
         let file = File::open(file).unwrap();
         let mut reader = Reader::from_reader(BufReader::new(file));
@@ -53,8 +56,10 @@ impl Parser {
         }
     }
     
+    // Start the parser
     pub fn run(&mut self) {
         let mut buf = Vec::new();
+        // Read xml events
         loop {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) if matches!(e.name().as_ref(), b"dblp") => {} // Skip if the tag is dblp
@@ -75,6 +80,8 @@ impl Parser {
         self.writer.finalize();
     }
 
+    /// Checks if a given xml tag is a publication.
+    /// Accepts "\<article>", "<inproceedings>", "\<proceedings>", "\<book>", "\<incollection>", "\<phdthesis>", "\<masterthesis>" and "\<www>"
     fn is_publication(tag: &[u8]) -> bool {
         matches!(
             tag,
@@ -89,6 +96,8 @@ impl Parser {
         )
     }
 
+    /// Checks if a given xml tag is a person record.
+    /// Defined by dblp as \<www key="homepages/...>".
     fn is_person(e: &BytesStart) -> bool {
         let tag = e.name();
         if let Some(attr) = e.try_get_attribute("key").unwrap() {
@@ -98,9 +107,11 @@ impl Parser {
         false
     }
 
+    /// Read the current xml tag until the end into a publication
     fn read_publication(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut publication = Publication::new();
+        // Get Publication key, Modification Date and Bibtex/Publication type
         let re_pubkey = Regex::new(r"\S+/\S+/\S+").unwrap();
         publication.key = String::from(
             eve.try_get_attribute("key")
@@ -125,6 +136,7 @@ impl Parser {
             b"www" => "www".to_string(),
             _ => "".to_string(),
         };
+        // Continue to read nested xml tags
         loop {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) => match e.name().as_ref() {
@@ -133,6 +145,7 @@ impl Parser {
                         let author = self.read_text(&e)?;
                         let mut person = Person::new();
                         person.add_name(author.as_str());
+                        // Insert author into publication
                         if !publication.authors.contains(&person) {
                             publication.authors.push(person);
                         }
@@ -155,15 +168,15 @@ impl Parser {
                         if let Some(attr) = attr.unwrap() { 
                             let value = attr.decode_and_unescape_value(self.reader.decoder())?;
                             match value.as_ref() {
-                                "isbn" => {
+                                "isbn" => { // Notes with type isbn are saved as isbn
                                     publication.isbn = Some(self.read_text(&e)?);
                                 }
-                                _ => publication
+                                _ => publication // Notes with other type are saved as resources
                                     .resources
                                     .push((String::from(value), self.read_text(&e)?)),
                             }
                         }
-                        else {
+                        else { // Type less notes are saved as notes
                             publication
                                 .resources
                                 .push((String::from("note"), self.read_text(&e)?));
@@ -216,11 +229,12 @@ impl Parser {
                             .unwrap();
                     } // Skip unknown tags
                 },
-                Ok(Event::End(e)) if e.name().as_ref() == eve.name().as_ref() => break,
+                Ok(Event::End(e)) if e.name().as_ref() == eve.name().as_ref() => break, // If end of initial publication tag is reached break
                 Ok(Event::Eof) => return Err("Unexpected EOF".into()),
                 _ => (),
             }
         }
+        // Check if publication fulfills standards
         if !publication.fulfills_constraints() {
             println!("{:?}", publication);
             println!("{:?}", eve);
@@ -230,6 +244,7 @@ impl Parser {
        Ok(())
     }
     
+    /// Write publication to csv file
     fn write_publications(&mut self) {
         for publication in self.publications.iter_mut() {
             // Venue
@@ -320,63 +335,68 @@ impl Parser {
     }
 }
 
+/// Read the current person xml tag until finished
 fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
     let mut buf = Vec::new();
     let mut person = Person::new();
+    // Get Modification Date
     person.mdate = String::from(
         eve.try_get_attribute("mdate")
             .unwrap()
             .unwrap()
             .decode_and_unescape_value(self.reader.decoder())?,
         );
-        loop {
-            match self.reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) => match e.name().as_ref() {
-                    b"author" => {
-                        let author = self.read_text(&e)?;
-                        if person.name == String::new() {
-                            person.add_name(author.as_str());
-                        } else {
-                            person.alias.push(read_person_name(&author));
-                        }
+    loop { // Iterate until tag closes
+        match self.reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => match e.name().as_ref() {
+                // Add names and aliases
+                b"author" => {
+                    let author = self.read_text(&e)?;
+                    if person.name == String::new() {
+                        person.add_name(author.as_str());
+                    } else {
+                        person.alias.push(read_person_name(&author));
                     }
-                    b"note" => {
-                        let attr = e
-                            .try_get_attribute("type")
-                            .unwrap()
-                            .unwrap_or(Attribute::from(("type", "ERROR")))
-                            .decode_and_unescape_value(self.reader.decoder())?;
-                        if attr == "affiliation" {
-                            let state = String::from(
-                                e.try_get_attribute("label")
-                                    .unwrap()
-                                    .unwrap_or(Attribute::from(("label", "current")))
-                                    .decode_and_unescape_value(self.reader.decoder())?,
-                            );
-                            person.affiliations.push((String::from(attr), state));
-                        }
+                }
+                b"note" => { // Affiliations
+                    let attr = e
+                        .try_get_attribute("type")
+                        .unwrap()
+                        .unwrap_or(Attribute::from(("type", "ERROR")))
+                        .decode_and_unescape_value(self.reader.decoder())?;
+                    if attr == "affiliation" {
+                        let state = String::from(
+                            e.try_get_attribute("label")
+                                .unwrap()
+                                .unwrap_or(Attribute::from(("label", "current")))
+                                .decode_and_unescape_value(self.reader.decoder())?,
+                        );
+                        person.affiliations.push((String::from(attr), state));
                     }
-                    b"url" => {
-                        let url = self.read_text(&e)?;
-                        person.urls.push(url);
-                    }
-                    _ => {
-                        self.reader
-                            .read_to_end_into(e.to_end().name(), &mut Vec::new())
-                            .unwrap();
-                    } // Skip unknown tags
-                },
-                Ok(Event::End(e)) if e.name().as_ref() == b"www" => break,
-                Ok(Event::Eof) => return Err("Unexpected EOF".into()),
-                _ => (),
-            }
+                }
+                b"url" => { // Homepages
+                    let url = self.read_text(&e)?;
+                    person.urls.push(url);
+                }
+                _ => {
+                    self.reader
+                        .read_to_end_into(e.to_end().name(), &mut Vec::new())
+                        .unwrap();
+                } // Skip unknown tags
+            },
+            Ok(Event::End(e)) if e.name().as_ref() == b"www" => break, // End of Tag
+            Ok(Event::Eof) => return Err("Unexpected EOF".into()),
+            _ => (),
         }
-        if person.check_valid() {
-            self.write_person(person);
-        }
-        Ok(())
     }
+    // Check validity of person
+    if person.check_valid() {
+        self.write_person(person);
+    }
+    Ok(())
+}
     
+    /// Write person to csv file
     fn write_person(&mut self, person: Person) -> () {
         self.author_map.insert((person.name.clone(), person.id), self.next_author_id);
         // Author
@@ -419,30 +439,32 @@ fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
         self.next_author_id += 1;
     }
 
+    /// Read the text of a tag
     fn read_text(&mut self, start: &BytesStart) -> Result<String, Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut text = String::new();
-        loop {
+        loop { // Iterate until tag closes
             match self.reader.read_event_into(&mut buf) {
-                Ok(Event::Text(e)) => {
+                Ok(Event::Text(e)) => { // Read direct Text
                     text += e.unescape()?.into_owned().as_str();
                 }
-                Ok(Event::Start(e)) => match e.name().as_ref() {
+                Ok(Event::Start(e)) => match e.name().as_ref() { // Skip over formatting tags
                     b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {},
                     _ => return Err(format!("Unexpected event start {0}", String::from_utf8_lossy(e.name().as_ref())).into())
                 },
-                Ok(Event::End(e)) if e.name().as_ref() == start.name().as_ref() => break,
-                Ok(Event::End(e)) => match e.name().as_ref() {
+                Ok(Event::End(e)) if e.name().as_ref() == start.name().as_ref() => break, // End loop after end of tag
+                Ok(Event::End(e)) => match e.name().as_ref() { // Skip over formatting tags
                     b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {},
                     _ => return Err(format!("Unexpected end event {0}", String::from_utf8_lossy(e.name().as_ref())).into()),
                 },
-                Ok(Event::Empty(_)) => {}
+                Ok(Event::Empty(_)) => {} // Skip empty formatting tags
                 _ => return Err(format!("Unexpected event {0} {1}", self.reader.buffer_position(), self.reader.error_position()).into()),
             }
         }
         Ok(text)
     }
     
+    /// Read the text of a tag as Integer
     fn read_int(&mut self, start: &BytesStart) -> Result<usize, Box<dyn Error>> {
         let value =  self.read_text(start)?;
         Ok(value.parse::<usize>().unwrap_or_else(|e1| { 
@@ -452,11 +474,12 @@ fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
     }
 }
 
+/// Datastruct for all Publication relevant data
 #[derive(Serialize, Deserialize)]
 pub struct Publication {
-    pubtype: String,
+    pubtype: String, // Bibtex type
     key: String,
-    mdate: String,
+    mdate: String, // Modification Date
     title: String,
     year: Option<usize>,
     month: Option<String>,
@@ -475,6 +498,7 @@ pub struct Publication {
 }
 
 impl Publication {
+    /// Create a new Publication
     fn new() -> Publication {
         Publication {
             pubtype: String::new(),
@@ -498,6 +522,7 @@ impl Publication {
         }
     }
 
+    /// Check if has at least a [`Publication::pubtype`], [`Publication::key`], [`Publication::mdate`] and [`Publication::title`].
     pub fn fulfills_constraints(&self) -> bool {
         !self.pubtype.is_empty() && !self.key.is_empty() && !self.mdate.is_empty() && !self.title.is_empty()
     }
@@ -528,6 +553,7 @@ impl fmt::Debug for Publication {
     }
 }
 
+/// Datastruct for all relevant Person data
 #[derive(Serialize, Deserialize, PartialEq)]
 pub struct Person {
     name: String,
@@ -539,6 +565,7 @@ pub struct Person {
 }
 
 impl Person {
+    /// Create a new Person
     fn new() -> Person {
         Person {
             name: String::new(),
@@ -550,10 +577,12 @@ impl Person {
         }
     }
 
+    /// Add Name to Person
     fn add_name(&mut self, name: &str) {
         (self.name, self.id) = read_person_name(name);
     }
 
+    /// Check if has at least [`Person::name`]
     fn check_valid(&self) -> bool {
         if self.name.is_empty() {
             return false
@@ -575,6 +604,7 @@ impl fmt::Debug for Person {
     }
 }
 
+/// Manages the writing of relevant data into csv files
 struct WriteManager {
     venues: Vec<(usize, Option<String>, Option<String>)>,
     publishers: Vec<(usize, Option<String>)>,
@@ -592,6 +622,7 @@ struct WriteManager {
 
 impl WriteManager {
     
+    /// Create new WriterManager
     pub fn new() -> WriteManager {
         // Touch all csv files and add header
         touch_file(VENUE_FILE, &["id", "name", "type"]);
@@ -619,6 +650,7 @@ impl WriteManager {
         touch_file(AUTHOR_WEBSITES_FILE, &["id", "author_id", "url"]);
         touch_file(AFFILIATIONS_FILE, &["id", "author_id", "affiliation", "type"]);
         touch_file(ALIAS_FILE, &["id", "author_id", "alias", "alias_id"]);
+        // Initialize WriterManager with empty vectors
         WriteManager {
             venues: vec![],
             publishers: vec![],
@@ -635,8 +667,11 @@ impl WriteManager {
         }
     }
 
+    /// Writes venue first to WriterManager and then to tsv file
     pub fn write_venue(&mut self, tuple: (usize, Option<String>, Option<String>)) {
+        // Add venue to list
         self.venues.push(tuple);
+        // If list of venue exceeds 10000 write all of them to file
         if self.venues.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -652,8 +687,12 @@ impl WriteManager {
             self.venues.clear()
         }
     }
+
+    /// Writes publisher first to WriterManager and then to tsv file
     pub fn write_publisher(&mut self, tuple: (usize, Option<String>)) {
+        // Add publisher to list
         self.publishers.push(tuple);
+        // If list of publishers exceeds 10000 write all of them to file
         if self.publishers.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -669,8 +708,12 @@ impl WriteManager {
             self.publishers.clear()
         }
     }
+
+    /// Writes editor first to WriterManager and then to tsv file
     pub fn write_editor(&mut self, tuple: (usize, String)) {
+        // Add editors to list
         self.editors.push(tuple);
+        // If list of editors exceeds 10000 write all of them to file
         if self.editors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -686,8 +729,12 @@ impl WriteManager {
             self.editors.clear()
         }
     }
+
+    /// Writes author first to WriterManager and then to tsv file
     pub fn write_author(&mut self, tuple: (usize, String, usize, String)) {
+        // Add author to list
         self.authors.push(tuple);
+        // If list of authors exceeds 10000 write all of them to file
         if self.authors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -703,8 +750,12 @@ impl WriteManager {
             self.authors.clear()
         }
     }
+
+    /// Writes publication first to WriterManager and then to tsv file
     pub fn write_publication(&mut self, tuple: (String, String, String, Option<usize>, Option<String>, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<usize>, Option<usize>)) {
+        // Add publication to list
         self.publications.push(tuple);
+        // If list of authors exceeds 10000 write all of them to file
         if self.publications.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -720,8 +771,12 @@ impl WriteManager {
             self.publications.clear()
         }
     }
+
+    /// Writes resource first to WriterManager and then to tsv file
     pub fn write_resource(&mut self, tuple: (usize, String, String, String)) {
+        // Add resource to list
         self.resources.push(tuple);
+        // If list of resources exceeds 10000 write all of them to file 
         if self.resources.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -737,8 +792,12 @@ impl WriteManager {
             self.resources.clear()
         }
     }
+
+    /// Writes publication editor first to WriterManager and then to tsv file
     pub fn write_publication_editor(&mut self, tuple: (String, usize)) {
+        // Add publication editor to list
         self.publication_editors.push(tuple);
+        // If list of publication editors exceeds 10000 write all of them to file
         if self.publication_editors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -754,8 +813,12 @@ impl WriteManager {
             self.publication_editors.clear()
         }
     }
+
+    /// Writes reference first to WriterManager and then to tsv file
     pub fn write_reference(&mut self, tuple: (String, String, String)) {
+        // Add refrence to list
         self.references.push(tuple);
+        // If list of refrences exceeds 10000 write all of them to file
         if self.references.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -771,8 +834,12 @@ impl WriteManager {
             self.references.clear()
         }
     }
+
+    /// Writes publication author first to WriterManager and then to tsv file
     pub fn write_publication_author(&mut self, tuple: (String, usize)) {
+        // Add publication author to list
         self.publication_authors.push(tuple);
+        // If list of publication authors exceeds 10000 write all of them to file
         if self.publication_authors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -788,8 +855,12 @@ impl WriteManager {
             self.publication_authors.clear()
         }
     }
+
+    /// Writes author website first to WriterManager and then to tsv file
     pub fn write_author_website(&mut self, tuple: (usize, usize, String)) {
+        // Add author website to list
         self.author_websites.push(tuple);
+        // If list of author websites exceeds 10000 write all of them to file
         if self.author_websites.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -805,8 +876,12 @@ impl WriteManager {
             self.author_websites.clear()
         }
     }
+
+    /// Writes affiliation first to WriterManager and then to tsv file
     pub fn write_affiliation(&mut self, tuple: (usize, usize, String, String)) {
+        // Add affiliation to list
         self.affiliations.push(tuple);
+        // If list of affiliations exceeds 10000 write all of them to file
         if self.affiliations.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -822,8 +897,12 @@ impl WriteManager {
             self.affiliations.clear()
         }
     }
+
+    /// Writes aliases first to WriterManager and then to tsv file
     pub fn write_aliases(&mut self, tuple: (usize, usize, String, usize)) {
+        // Add aliases to list
         self.aliases.push(tuple);
+        // If list of aliases exceeds 10000 write them to file
         if self.aliases.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -840,7 +919,9 @@ impl WriteManager {
         }
     }
     
+    /// Write the remaining items contained in any list to corresponding file
     pub fn finalize(&mut self) {
+        // Venues
         if self.venues.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -855,6 +936,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.venues.clear()
         }
+        // Publishers
         if self.publishers.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -869,6 +951,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.publishers.clear()
         }
+        // Editors
         if self.editors.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -883,6 +966,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.editors.clear()
         }
+        // Affiliations
         if self.affiliations.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -897,6 +981,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.affiliations.clear()
         }
+        // Authors
         if self.authors.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -911,6 +996,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.authors.clear()
         }
+        // Publications
         if self.publications.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -925,6 +1011,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.publications.clear()
         }
+        // Resources
         if self.resources.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -939,6 +1026,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.resources.clear()
         }
+        // Publication Editors
         if self.publication_editors.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -953,6 +1041,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.publication_editors.clear()
         }
+        // References
         if self.references.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -967,6 +1056,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.references.clear()
         }
+        // Publication Authors
         if self.publication_authors.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -981,6 +1071,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.publication_authors.clear()
         }
+        // Author Websites
         if self.author_websites.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -995,6 +1086,7 @@ impl WriteManager {
             wrt.flush().unwrap();
             self.author_websites.clear()
         }
+        // Aliases
         if self.aliases.len() > 0 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
@@ -1012,6 +1104,7 @@ impl WriteManager {
     }
 }
 
+/// Touch the a new tsv with the specified header
 fn touch_file<I, T>(file: &str, record: I) -> ()
 where
     I: IntoIterator<Item=T>,
@@ -1022,14 +1115,17 @@ where
     wrt.flush().unwrap();
 }
 
+/// Read the persons name and generate the id for him if needed.
+/// DBLP writes duplicate names as: "Name 0001", "Name 0002" etc.
 fn read_person_name(name: &str) -> (String, usize) {
     let re = Regex::new(r"(.*)\s+(\d+)").unwrap();
     let name = name.trim();
+    // There exists an ID 
     if let Some(caps) = re.captures(name) {
         let name = caps.get(1).unwrap().as_str().to_string();
         let id = caps.get(2).unwrap().as_str().parse::<usize>().unwrap();
         (name, id)
-    } else {
+    } else { // No ID specified
         let name = name.to_string();
         (name, 0)
     }
