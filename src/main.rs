@@ -559,7 +559,7 @@ fn write_results_aggregated(
 }
 
 fn clean_up() -> () {
-    remove_dir_all("/extern/data/")?;
+    remove_dir_all("/extern/data/");
 }
 
 /// Downloads the xml GZIP archive for the dblp dataset.
