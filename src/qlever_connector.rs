@@ -292,13 +292,16 @@ impl QLeverConnection {
         let res = client.post(format!("http://127.0.0.1:{port}"))
             .headers(headers)
             .body(query)
-            .send();
+            .send()
+            .unwrap_or_else(|error| {
+                panic!("Failed to unwrap response {error:?}")
+            });
         
-        if let Err(e) = res {
-            return Err(e.to_string().into());
+        if let Err(err) = res.error_for_status(){
+            return Err(err.into())
         }
-        
-        let text = res.unwrap().text().unwrap();
+
+        let text = res.text().unwrap();
         let result: JsonResult = serde_json::from_str(&text).expect("deserialize query result failed.");
         
         let time: u128 = result.time.total.chars()
