@@ -326,7 +326,7 @@ impl QLeverConnection {
         }
 
         // Parse Result into JsonResult
-        let text = res.text().unwrap();
+        let text = res.unwrap().text().unwrap();
         let result: JsonResult = serde_json::from_str(&text).expect("deserialize query result failed.");
         
         // Convert time from "Xms" into integer
