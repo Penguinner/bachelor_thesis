@@ -203,11 +203,11 @@ impl QLeverConnection {
         };
         // Test connection
         let addr = format!("127.0.0.1:{port}");
-        conn.wait_for_connect(addr.as_str());
+        conn.wait_for_connect();
         conn
     }
 
-    fn wait_for_connect(&mut self, addr: &str) -> () {
+    fn wait_for_connect(&mut self) -> () {
         let timeout = Duration::from_secs(600);
         let start = Instant::now();
         let mut attempts: u64 = 0;
@@ -215,25 +215,16 @@ impl QLeverConnection {
             attempts += 1;
             let remaining = timeout.saturating_sub(start.elapsed());
             if remaining.is_zero() {
-                panic!("Qlever at {addr} not ready after {timeout:?}")
+                panic!("Qlever at not ready after {timeout:?}")
             }
 
-            let sock_addr: SocketAddr = match addr.parse::<SocketAddr>() {
-                Ok(it) =>  it,
-                Err(e) => panic!("resolve {addr} : {e}"),
-            };
-
-            let tcp_ok = TcpStream::connect_timeout(&sock_addr, remaining.min(Duration::from_secs(2))).is_ok();
-
-            if tcp_ok {
-                let result = self.do_query_request("SELECT * WHERE {?s ?p ?o} LIMIT 1");
-                match result {
-                    Ok(_) => {
-                        return ();
-                    }
-                    Err(e) => {
-                        eprintln!("Failure during HTTP request: {:?}", e);
-                    }
+            let result = self.do_query_request("SELECT * WHERE {?s ?p ?o} LIMIT 1");
+            match result {
+                Ok(_) => {
+                    return ();
+                }
+                Err(e) => {
+                    eprintln!("Failure during HTTP request: {:?}", e);
                 }
             }
 
@@ -244,7 +235,7 @@ impl QLeverConnection {
             let sleep_for = Duration::from_millis(backoff_ms.min(remaining.as_millis() as u64));
 
             eprintln!(
-                "[ waiting for qlever ] attempt {attempts} tcp_ok={tcp_ok}, \
+                "[ waiting for qlever ] attempt {attempts}, \
                 elapsed={:?}, retrying in {:?}",
                 start.elapsed(),
                 sleep_for,
