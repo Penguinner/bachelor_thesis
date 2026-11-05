@@ -184,7 +184,7 @@ impl PostgresConnection {
         // Execute Query
         let stmt = self.client.prepare(query)?;
         let now = Instant::now();
-        let response = self.client.query(&stmt, &[]);
+        let response: Result<Vec<Row>, postgres::Error> = self.client.query(&stmt, &[]);
         let duration = now.elapsed().as_millis();
         // Write Result info to log
         let mut file = OpenOptions::new()
@@ -193,21 +193,21 @@ impl PostgresConnection {
             .append(true)
             .open(format!("/extern/data/postgres.{}.log", self.dataset.name()))
             .unwrap();
-        let mut result: Result<u128, Box<dyn Error>>;
+        
         let logmsg: String;
-        match response {
+        let result: Result<u128, Box<dyn Error>> = match response {
             Ok(data) => {
                 // Get columns from first row
                 let mut columns = 0;
                 if let Some(row) = data.get(0) {
                     columns = row.len();
                 }
-                result = Ok(duration);
                 logmsg = format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}\n", query, duration, columns, data.len());
+                Ok(duration)
             },
             Err(e) => {
-                result = Err(e.into());
                 logmsg = format!("Query: {0} failed\n{1}", query, e);
+                Err(e.into())
             }
         };
         let _ = file.write(logmsg.as_bytes());
