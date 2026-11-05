@@ -201,7 +201,7 @@ impl QLeverConnection {
         } else {
             command += " -k 200";
         }
-        command += format!("-s 600s -a benchmark > /index/{name}.server-log.txt 2>&1'").as_str();
+        command += format!(" -s 600s -a benchmark > /index/{name}.server-log.txt 2>&1'").as_str();
         // Execute Start Command
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         let mut conn = QLeverConnection {
