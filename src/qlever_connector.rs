@@ -201,10 +201,7 @@ impl QLeverConnection {
         } else {
             command += " -k 200";
         }
-        if let Some(timeout) = qlever_file.server.get("TIMEOUT") {
-            command += format!(" -s {timeout}").as_str();
-        }
-        command += format!(" -a benchmark > /index/{name}.server-log.txt 2>&1'").as_str();
+        command += format!("-s 600s -a benchmark > /index/{name}.server-log.txt 2>&1'").as_str();
         // Execute Start Command
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         let mut conn = QLeverConnection {
@@ -308,7 +305,7 @@ impl QLeverConnection {
     
     /// Make a request to the QLever server with a query
     fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
-        let port = self.qlever_file.server.get("PORT").unwrap().as_str();
+        let port = self.qlever_file.server.get("PORT")?.as_str();
         // Create Headers
         let mut headers = header::HeaderMap::new();
         headers.insert("Accept", "application/qlever-results+json".parse().unwrap());
@@ -319,15 +316,13 @@ impl QLeverConnection {
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy()
             .timeout(Duration::from_secs(600))
-            .build()
-            .unwrap();
+            .build()?;
         let query = query.to_string();
         // Do Post request with query
         let res = client.post(format!("http://127.0.0.1:{port}"))
             .headers(headers)
             .body(query)
-            .send()
-            .unwrap()
+            .send()?
             .error_for_status();
         
         // Check for http Errors
@@ -337,14 +332,13 @@ impl QLeverConnection {
 
         // Parse Result into JsonResult
         let text = res.unwrap().text().unwrap();
-        let result: JsonResult = serde_json::from_str(&text).expect("deserialize query result failed.");
+        let result: JsonResult = serde_json::from_str(&text)?;
         
         // Convert time from "Xms" into integer
         let time: u128 = result.time.total.chars()
             .take_while(|c| c.is_ascii_digit())
             .collect::<String>()
-            .parse::<u128>()
-            .expect("parse time failed");
+            .parse::<u128>()?;
         
         Ok((time, result.runtime.query_execution_tree.result_rows, result.runtime.query_execution_tree.result_cols))
     }
