@@ -305,7 +305,7 @@ impl QLeverConnection {
     
     /// Make a request to the QLever server with a query
     fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
-        let port = self.qlever_file.server.get("PORT").ok_or(Err("Failed reading Port from file"))?.as_str();
+        let port = self.qlever_file.server.get("PORT").ok_or("Failed reading Port from file")?.as_str();
         // Create Headers
         let mut headers = header::HeaderMap::new();
         headers.insert("Accept", "application/qlever-results+json".parse().unwrap());
