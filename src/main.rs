@@ -560,7 +560,7 @@ fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<
         .from_writer(File::create(filename.as_str())?);
 
     for result in results {
-        writer.write_record(result)?;
+        writer.serialize(result)?;
     }
 
     Ok(())
@@ -579,7 +579,7 @@ fn write_results_aggregated(
     // Aggregate
     for result in results {
         let aggregate = AggregateTestResult::new(result);
-        writer.write_record(aggregate)?;
+        writer.serialize(aggregate)?;
     }
     Ok(())
 }

@@ -1,6 +1,6 @@
 use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, Dataset, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
 use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
-use bollard::query_parameters::{CreateContainerOptionsBuilder, RestartContainerOptions};
+use bollard::query_parameters::{CreateContainerOptionsBuilder, PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions, RestartContainerOptions};
 use bollard::Docker;
 use futures::TryStreamExt;
 use postgres::{Client, NoTls, Row};
@@ -230,6 +230,10 @@ impl PostgresConnection {
             ).await.unwrap();
 
             docker.remove_container(self.docker_id.as_str(), None::<bollard::query_parameters::RemoveContainerOptions>).await.unwrap();
+
+            docker.prune_volumes(None::<PruneVolumesOptions>).await;
+            docker.prune_build(None::<PruneBuildOptions>).await;
+            docker.prune_images(None::<PruneImagesOptions>).await;
         });
         
         Ok(())

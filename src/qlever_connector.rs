@@ -251,6 +251,10 @@ impl QLeverConnection {
             ).await.unwrap();
 
             docker.remove_container(self.docker_id.as_str(), None::<bollard::query_parameters::RemoveContainerOptions>).await.unwrap();
+
+            docker.prune_volumes(None::<PruneVolumesOptions>).await;
+            docker.prune_build(None::<PruneBuildOptions>).await;
+            docker.prune_images(None::<PruneImagesOptions>).await;
         });
 
         Ok(())
