@@ -1,0 +1,21 @@
+# Simplified Test Qleverfile
+# Another Comment line
+
+[data]
+NAME                  = test
+TEST_STRING           = "Test string with double quotes"
+TEST_VARIABLE_REPLACE = exec something-${NAME}
+TEST_NESTED_REPLACE   = exec something else; ${TEST_VARIABLE_REPLACE}
+
+[index]
+TEST_VALUE         = Testing
+TEST_REPLACE_OTHER = testing ${data:NAME}
+
+[server]
+MAP_VALUE = { "value_1": "test", "value_2": "testing" }
+
+[runtime]
+NOT_NEEDED_VALUE = empty
+
+[ui]
+NOT_NEEDED_VALUE_2 = empty

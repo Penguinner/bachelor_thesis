@@ -1130,3 +1130,23 @@ fn read_person_name(name: &str) -> (String, usize) {
         (name, 0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::assert_eq;
+    use super::*;
+
+    #[test]
+    fn test_read_person_no_id() {
+        let (name_r, id_r) = read_person_name("Max Mustermann");
+        assert_eq!(name_r, "Max Mustermann");
+        assert_eq!(id_r, 0);
+    }
+
+    #[test]
+    fn test_read_person_with_id() {
+        let (name_r, id_r) = read_person_name("Max Mustermann 0001");
+        assert_eq!(name_r, "Max Mustermann");
+        assert_eq!(id_r, 1);
+    }
+}

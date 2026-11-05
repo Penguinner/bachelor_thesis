@@ -7,7 +7,7 @@ use async_compression::tokio::bufread::GzipDecoder;
 use clap::{Arg, ArgAction, ArgGroup, command, value_parser};
 use csv::ReaderBuilder;
 use futures::TryStreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::collections::HashMap;
 use std::error::Error;
@@ -306,7 +306,7 @@ enum Database {
 
 impl Database {
 
-    // Returns name of database
+    /// Returns name of database
     pub fn name(&self) -> &str {
         match self {
             Database::QLever => "qlever",
@@ -411,13 +411,14 @@ impl Connection {
     }
 }
 
+#[derive(Serialize)]
 /// Contains the results of the performance test.
 pub struct TestResult {
     /// Index of the test executed.
     id: usize,
+    failures: usize,
     /// Vector of time results in ms.
     results: Vec<u128>,
-    failures: usize,
 }
 
 impl TestResult {
@@ -427,21 +428,61 @@ impl TestResult {
         TestResult { id, results: Vec::new(), failures: 0 }
     }
 
-    /// Converts itself into a Vector of Strings
-    pub fn to_string_list(&self) -> Vec<String> {
-        let mut results: Vec<String> = Vec::new();
-        results.push(self.id.to_string());
-        results.push(self.failures.to_string());
-        results.append(&mut self.results.iter().map(|x| x.to_string()).collect());
-        results
-    }
-
     pub fn add_time(&mut self, time: u128) {
         self.results.push(time);
     }
 
     pub fn inc_failures(&mut self) -> () {
         self.failures += 1;
+    }
+}
+
+#[derive(Serialize)]
+/// Aggregates test results and stores it
+pub struct AggregateTestResult {
+    min: String,
+    max: String,
+    quart_1: String,
+    median: String,
+    quart_3: String,
+    avg: String,
+    mode: String,
+    failures: String,
+}
+
+impl AggregateTestResult {
+
+    pub fn new(raw_result: &TestResult) -> AggregateTestResult {
+        let mut numbers = raw_result.results.clone();
+        let mut min: String = String::from("-");
+        let mut max: String = String::from("-");
+        let mut quart_1: String = String::from("-");
+        let mut median: String = String::from("-");
+        let mut quart_3: String = String::from("-");
+        let mut avg: String = String::from("-");
+        let mut mode: String = String::from("-");
+        if !numbers.is_empty() {
+            numbers.sort();
+            avg = format!("{:.2}",(numbers.iter().sum::<u128>() as f64 / numbers.len() as f64));
+            min = numbers.first().unwrap().to_string();
+            max = numbers.last().unwrap().to_string();
+            quart_1 = numbers[numbers.len()/4].to_string();
+            median = numbers[numbers.len() / 2].to_string();
+            quart_3 = numbers[numbers.len()*3/4].to_string();
+            let mut occurences = HashMap::new();
+            mode = numbers
+                .iter()
+                .copied()
+                .max_by_key(|&n| {
+                    let count = occurences.entry(n).or_insert(0);
+                    *count += 1;
+                    *count
+                })
+                .unwrap()
+                .to_string();
+        }
+
+        AggregateTestResult { min, max, quart_1, median, quart_3, avg, mode, failures: raw_result.failures.to_string() }
     }
 }
 
@@ -514,12 +555,12 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
 fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
-        .has_headers(false)
+        .has_headers(true)
         .flexible(true)
         .from_writer(File::create(filename.as_str())?);
 
     for result in results {
-        writer.write_record(result.to_string_list())?;
+        writer.write_record(result)?;
     }
 
     Ok(())
@@ -535,40 +576,11 @@ fn write_results_aggregated(
         .has_headers(true)
         .from_writer(File::create(filename.as_str())?);
 
-    // Write header
-    writer.write_record(&["id", "min", "1st-quartile", "median", "3rd-quartile", "mode", "avg", "max"])?;
     // Aggregate
     for result in results {
-        let mut numbers = result.results.clone();
-        numbers.sort();
-        let avg: f64 = numbers.iter().sum::<u128>() as f64 / numbers.len() as f64;
-        let min = numbers.first().unwrap();
-        let max = numbers.last().unwrap();
-        let quart_1 = numbers[numbers.len()/4];
-        let median = numbers[numbers.len() / 2];
-        let quart_3 = numbers[numbers.len()*3/4];
-        let mut occurences = HashMap::new();
-        let mode = numbers
-            .iter()
-            .copied()
-            .max_by_key(|&n| {
-                let count = occurences.entry(n).or_insert(0);
-                *count += 1;
-                *count
-            })
-            .unwrap();
-        writer.write_record(&[
-            result.id.to_string(),
-            min.to_string(),
-            quart_1.to_string(),
-            median.to_string(),
-            quart_3.to_string(),
-            mode.to_string(),
-            avg.to_string(),
-            max.to_string(),
-        ])?;
+        let aggregate = AggregateTestResult::new(result);
+        writer.write_record(aggregate)?;
     }
-
     Ok(())
 }
 
@@ -611,7 +623,107 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_eq;
     use super::*;
 
 
+    // Unit Tests for TestResult struct
+    #[test]
+    fn test_test_result_creation() {
+        let result = TestResult::new(10);
+
+        assert_eq!(result.id,10);
+        assert_eq!(result.failures, 0);
+        assert_eq!(result.results.len(), 0);
+    }
+
+    #[test]
+    fn test_add_time() {
+        let mut result = TestResult::new(1);
+
+        assert_eq!(result.results.len(), 0);
+
+        result.add_time(200);
+
+        assert_eq!(result.results.len(), 1);
+        assert_eq!(result.results[0],200);
+    }
+
+    #[test]
+    fn test_inc_failures() {
+        let mut result = TestResult::new(1);
+
+        assert_eq!(result.failures, 0);
+
+        result.inc_failures();
+
+        assert_eq!(result.failures, 1);
+    }
+
+    // Unit Tests for AggregateTestResult struct
+    #[test]
+    fn test_simple_aggregate_creation() {
+        // Setup
+        let mut test = TestResult::new(1);
+        test.add_time(25);
+        test.add_time(25);
+        test.add_time(36);
+        test.add_time(50);
+        test.add_time(65);
+        test.add_time(100);
+        test.add_time(120);
+        let agg = AggregateTestResult::new(&test);
+        // Test
+        assert_eq!(agg.min, "25");
+        assert_eq!(agg.max, "120");
+        assert_eq!(agg.quart_1, "25");
+        assert_eq!(agg.median, "50");
+        assert_eq!(agg.quart_3, "100");
+        assert_eq!(agg.avg, "60.14");
+        assert_eq!(agg.mode, "25");
+        assert_eq!(agg.failures, "0")
+    }
+
+    #[test]
+    fn test_failures_only_aggregate_creation() {
+        let mut test = TestResult::new(1);
+        for _ in 0..10 {
+            test.inc_failures();
+        }
+        let agg = AggregateTestResult::new(&test);
+        // Test
+        assert_eq!(agg.min, "-");
+        assert_eq!(agg.max, "-");
+        assert_eq!(agg.quart_1, "-");
+        assert_eq!(agg.median, "-");
+        assert_eq!(agg.quart_3, "-");
+        assert_eq!(agg.avg, "-");
+        assert_eq!(agg.mode, "-");
+        assert_eq!(agg.failures, "10")
+    }
+
+    #[test]
+    fn test_complex_aggregate_creation() {
+        let mut test = TestResult::new(1);
+        test.add_time(25);
+        test.add_time(25);
+        test.add_time(36);
+        test.add_time(50);
+        test.add_time(65);
+        test.add_time(100);
+        test.add_time(120);
+        for _ in 0..10 {
+            test.inc_failures();
+        }
+        let agg = AggregateTestResult::new(&test);
+        // Test
+        assert_eq!(agg.min, "25");
+        assert_eq!(agg.max, "120");
+        assert_eq!(agg.quart_1, "25");
+        assert_eq!(agg.median, "50");
+        assert_eq!(agg.quart_3, "100");
+        assert_eq!(agg.avg, "60.14");
+        assert_eq!(agg.mode, "25");
+        assert_eq!(agg.failures, "10")
+    }
 }

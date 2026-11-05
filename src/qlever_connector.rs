@@ -69,25 +69,8 @@ impl QLeverConnection {
         let response = reqwest::blocking::get(target).unwrap();
         let content = response.text().unwrap();
         // Convert to QLeverfile struct
-        let sanitizied = &Self::sanitize_toml(content);
-        return toml::from_str::<QleverFile>(sanitizied).unwrap();
-    }
-
-    /// Sanitize QLeverfile so it can be Deserialized without problem
-    fn sanitize_toml(string: String) -> String {
-        // Regex Setup
-        let comments = Regex::new(r"#\s.*\n?").unwrap();
-        let jsons = Regex::new(r"=\s(.*)").unwrap();
-        // Remove Comments
-        let mut new_toml = comments.replace_all(string.as_str(), "").to_string();
-        // Replace " with '
-        new_toml = new_toml.as_str().replace("\"","\'").to_string();
-        // Wrap properties in "
-        new_toml = jsons.replace_all(new_toml.as_str(), |caps: &Captures| {
-            let word = caps[1].to_string();
-            format!("= \"{word}\"")
-        }).to_string();
-        new_toml.trim().to_string()
+        let sanitized = sanitize_toml(content);
+        return toml::from_str::<QleverFile>(sanitized.as_str()).unwrap();
     }
     
     /// Get Data for dataset defined by GET_DATA_CMD in QLeverfile
@@ -457,4 +440,68 @@ fn command_assist(command_str: &str, args: &[&str], current_dir: &str) -> Result
     } else {
         Err(format!("Command failed status code: {0}\nCommand: {1} {2:?}", command.status, command_str, args).into())
     }
+}
+
+/// Sanitize QLeverfile so it can be Deserialized without problem
+fn sanitize_toml(string: String) -> String {
+    // Regex Setup
+    let comments = Regex::new(r"#\s.*\n?").unwrap();
+    let jsons = Regex::new(r"=\s(.*)").unwrap();
+    // Remove Comments
+    let mut new_toml = comments.replace_all(string.as_str(), "").to_string();
+    // Replace double quotes with single quotes
+    new_toml = new_toml.as_str().replace("\"","\'").to_string();
+    // Wrap properties in double quotes
+    new_toml = jsons.replace_all(new_toml.as_str(), |caps: &Captures| {
+        let word = caps[1].to_string();
+        format!("= \"{word}\"")
+    }).to_string();
+    new_toml.trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::assert_eq;
+    use super::*;
+
+    fn test_file() -> String {
+        include_str!("test-data/test_file.qlever").to_string()
+    }
+
+    #[test]
+    fn test_sanitize_toml() {
+        let file = test_file();
+        let sanitized = sanitize_toml(file);
+
+        // Removed all comments
+        assert!(!sanitized.contains("#"));
+        // Replaced double quotes with single quotes
+        assert!(sanitized.contains("'Test string with double quotes"));
+        assert!(sanitized.contains("{ 'value_1': 'test', 'value_2': 'testing' }"));
+        // Wrapped properties in double quotes
+        let properties = Regex::new(r#"\S*\s*=\s[^"].*[^"]$"#).unwrap();
+        assert!(!properties.is_match(&sanitized))
+    }
+
+    #[test]
+    fn test_qlever_file_internal_replace() {
+        let file = test_file();
+        let sanitized = sanitize_toml(file);
+        let mut qleverfile = toml::from_str::<QleverFile>(sanitized.as_str()).unwrap();
+        qleverfile.replace_internal_variables();
+
+        assert_eq!(
+            qleverfile.data.get("TEST_VARIABLE_REPLACE"),
+            Some(&"exec something-test".to_string())
+        );
+        assert_eq!(
+            qleverfile.data.get("TEST_NESTED_REPLACE"),
+            Some(&"exec something else; exec something-test".to_string())
+        );
+        assert_eq!(
+            qleverfile.index.get("TEST_REPLACE_OTHER"),
+            Some(&"testing test".to_string())
+        );
+    }
+
 }
