@@ -10,6 +10,7 @@ use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use bollard::Docker;
+use bollard::query_parameters::{PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions};
 use glob::glob;
 use regex::{Captures, Regex};
 use serde_json::Value;
