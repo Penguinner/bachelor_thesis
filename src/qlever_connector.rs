@@ -278,7 +278,6 @@ impl QLeverConnection {
 
     /// Run a test query on QLever
     pub fn run_test_query(&mut self, query: &str) -> Result<u128 , Box<dyn Error>> {
-        let name = self.qlever_file.data.get("NAME").unwrap().as_str();
         // Run query
         let response = self.do_query_request(query);
         // Write results to log
@@ -293,11 +292,12 @@ impl QLeverConnection {
                 Err(e)
             }
         };
+        let filepath: String = format!("/extern/data/qlever.{}.log", self.qlever_file.data.get("NAME").unwrap());
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
-            .open(format!("/extern/data/qlever.{}.log", name))
+            .open(filepath)
             .unwrap();
         let _ = file.write(
             logmsg.as_bytes()

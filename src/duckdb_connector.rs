@@ -108,7 +108,7 @@ impl DuckDBConnection {
     pub fn run_test_query(&self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Execute the query
         let mut stmt: Statement<'_> = self.connection.prepare(query)?;
-        let response: Result<Row<'_>, Box<dyn Error>> = stmt.query(params![]);
+        let response: Result<Row<'_>, duckdb::Error> = stmt.query(params![]);
         // Get timing info from profiling
         let profiling = self.connection.get_profiling_info().expect("profiling should be enabled");
         let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
