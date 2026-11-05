@@ -327,9 +327,7 @@ impl QLeverConnection {
             .headers(headers)
             .body(query)
             .send()
-            .unwrap_or_else(|error| {
-                panic!("Failed to unwrap response {error:?}")
-            })
+            .unwrap()
             .error_for_status();
         
         // Check for http Errors
