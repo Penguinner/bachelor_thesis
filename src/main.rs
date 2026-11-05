@@ -515,6 +515,7 @@ fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .has_headers(false)
+        .flexible(true)
         .from_writer(File::create(filename.as_str())?);
 
     for result in results {
