@@ -1,5 +1,5 @@
 use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
-use duckdb::{params, Connection, Row, Statement};
+use duckdb::{params, Connection, Rows, Statement};
 use std::error::Error;
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -108,7 +108,7 @@ impl DuckDBConnection {
     pub fn run_test_query(&self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Execute the query
         let mut stmt: Statement<'_> = self.connection.prepare(query)?;
-        let response: Result<Row<'_>, duckdb::Error> = stmt.query(params![]);
+        let response: Result<Rows<'_>, duckdb::Error> = stmt.query(params![]);
         // Get timing info from profiling
         let profiling = self.connection.get_profiling_info().expect("profiling should be enabled");
         let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
@@ -122,7 +122,7 @@ impl DuckDBConnection {
             },
             Err(e) => {
                 logmsg = format!("Query: {0} failed\n {e}", query);
-                Err(e)
+                Err(e.into())
             }
         };
         let mut file = OpenOptions::new()
