@@ -6,7 +6,6 @@ COPY Cargo.toml .
 COPY src ./src
 RUN cargo install --path . --all-features
 RUN cargo check
-RUN cargo fmt --all --check
 RUN cargo test
 
 # Stage 2: Runtime enviornment
