@@ -417,6 +417,7 @@ pub struct TestResult {
     /// Index of the test executed.
     id: usize,
     failures: usize,
+    #[serde(flatten)]
     /// Vector of time results in ms.
     results: Vec<u128>,
 }
@@ -555,7 +556,7 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
 fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
-        .has_headers(true)
+        .has_headers(false)
         .flexible(true)
         .from_writer(File::create(filename.as_str())?);
 
