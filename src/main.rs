@@ -41,6 +41,82 @@ const ALIAS_FILE: &str = "/extern/data/aliases.tsv";
 
 fn main() {
     // CLI Setup
+    let matches = setup_cli();
+
+    let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
+
+    // Register database to be tested
+    let mut dbs: Vec<Database> = Vec::new();
+    if matches.get_flag("qlever") {
+        dbs.push(Database::QLever);
+    }
+    if matches.get_flag("postgres") {
+        dbs.push(Database::Postgres);
+    }
+    #[cfg(feature = "duckdb")]
+    if matches.get_flag("duckdb") {
+        dbs.push(Database::DuckDB);
+    }
+
+    // Create directory for storing temporary data
+    let _ = create_dir_all("/extern/data");
+
+    let mut datasets: Vec<Dataset> = Vec::new();
+    if matches.get_flag("dblp") {
+        datasets.push(Dataset::Dblp);
+        // Download and Parse dblp data for sql use
+        if dbs
+            .iter()
+            .any(|x| x.name() == "duckdb" || x.name() == "postgres")
+        {
+            let rt = Runtime::new().unwrap();
+            let handle = rt.handle();
+
+            let _ = handle
+                .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
+                .unwrap();
+            let mut parser = Parser::new("/extern/data/dblp.xml");
+            parser.run();
+            println!("Finished Parsing DBLP data");
+        }
+    }
+    if matches.get_flag("osm-planet") {
+        datasets.push(Dataset::OsmPlanet);
+        // Download osm-planet data
+        if dbs
+            .iter()
+            .any(|x| x.name() == "duckdb" || x.name() == "postgres")
+        {
+            let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
+            println!("Downloading {url}");
+            let client = reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(900))
+                .build()
+                .unwrap();
+            let response = client.get(url).send().unwrap();
+            let file_path = format!("/extern/data/planet-latest.osm.pbf");
+            let mut file = File::create(&file_path).unwrap();
+            file.write_all(&response.bytes().unwrap()).unwrap();
+        }
+    }
+
+    // Create cross join between datasets and databases
+    let tests: Vec<Test> = iproduct!(dbs, datasets)
+        .map(|(db, dataset)| Test { db, dataset })
+        .collect();
+
+    run_tests(
+        tests,
+        iter,
+        matches.get_flag("raw"),
+        matches.get_flag("agg"),
+        matches.get_flag("hotrun"),
+    );
+    clean_up();
+    println!("Finished Tests");
+}
+
+fn setup_cli() -> clap::ArgMatches {
     let matches = command!()
         .arg(
             Arg::new("dblp")
@@ -108,74 +184,16 @@ fn main() {
                 .required(false),
         )
         .group(
+            // Require at least one dataset
             ArgGroup::new("dataset")
                 .args(["dblp", "osm-planet"])
                 .multiple(true),
         )
         .get_matches();
+    matches
+}
 
-    let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
-
-    // Register database to be tested
-    let mut dbs: Vec<Database> = Vec::new();
-    if matches.get_flag("qlever") {
-        dbs.push(Database::QLever);
-    }
-    if matches.get_flag("postgres") {
-        dbs.push(Database::Postgres);
-    }
-    #[cfg(feature = "duckdb")]
-    if matches.get_flag("duckdb") {
-        dbs.push(Database::DuckDB);
-    }
-
-    // Create directory for storing temporary data
-    let _ = create_dir_all("/extern/data");
-
-    let mut datasets: Vec<Dataset> = Vec::new();
-    if matches.get_flag("dblp") {
-        datasets.push(Dataset::Dblp);
-        // Download and Parse dblp data for sql use
-        if dbs
-            .iter()
-            .any(|x| x.name() == "duckdb" || x.name() == "postgres")
-        {
-            let rt = Runtime::new().unwrap();
-            let handle = rt.handle();
-
-            let _ = handle
-                .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
-                .unwrap();
-            let mut parser = Parser::new("/extern/data/dblp.xml");
-            parser.run();
-            println!("Finished Parsing DBLP data");
-        }
-    }
-    if matches.get_flag("osm-planet") {
-        datasets.push(Dataset::OsmPlanet);
-        // Download osm-planet data
-        if dbs
-            .iter()
-            .any(|x| x.name() == "duckdb" || x.name() == "postgres")
-        {
-            let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
-            println!("Downloading {url}");
-            let client = reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(900))
-                .build()
-                .unwrap();
-            let response = client.get(url).send().unwrap();
-            let file_path = format!("/extern/data/planet-latest.osm.pbf");
-            let mut file = File::create(&file_path).unwrap();
-            file.write_all(&response.bytes().unwrap()).unwrap();
-        }
-    }
-
-    // Create cross join between datasets and databases
-    let tests: Vec<Test> = iproduct!(dbs, datasets)
-        .map(|(db, dataset)| Test { db, dataset })
-        .collect();
-
+fn run_tests(tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotrun: bool) {
     // Run Tests
     for test in tests {
         clear_cache().expect("Failed to clear cache");
@@ -188,71 +206,87 @@ fn main() {
             .to_connection(test.dataset)
             .expect(format!("Failed to create connection for {}", name).as_str());
         // Run Queries
-        let results = run_test(&query_file, iter, &mut conn, false)
+        let results: Vec<TestResult> = run_test(&query_file, iter, &mut conn, false)
             .expect(format!("Failed while testing coldrun for {}", name).as_str());
-        // Save Results
-        let _ = create_dir_all("/extern/results");
-        // Write raw results to a tsv file
-        if matches.get_flag("raw") {
-            write_results(&results, format!("/extern/results/{}.raw.tsv", name)).expect(
-                format!(
-                    "Failed while writing raw results of cold run {} to file",
-                    name
-                )
-                .as_str(),
-            );
-        }
-        // Write aggregated results to a tsv file
-        if matches.get_flag("aggregate") {
-            write_results_aggregated(&results, format!("/extern/results/{}.aggregate.tsv", name))
-                .expect(
-                    format!(
-                        "Failed while writing aggregate results of cold run {} to file",
-                        name
-                    )
-                    .as_str(),
-                );
-        }
-        // If hot flag is present do another run with no cache clearing or cooldown
-        if matches.get_flag("hot") {
-            let hot_results = run_test(&query_file, iter, &mut conn, true)
+        let mut hot_results: Vec<TestResult> = Vec::new();
+        if hotrun {
+            hot_results = run_test(&query_file, iter, &mut conn, true)
                 .expect(format!("Failed while testing hotrun for {}", name).as_str());
-            // Write hot raw results to a tsv file
-            if matches.get_flag("raw") {
-                write_results(
-                    &hot_results,
-                    format!("/extern/results/{}-hot.raw.tsv", name),
-                )
-                .expect(
-                    format!(
-                        "Failed while writing raw results of hot run {} to file",
-                        name
-                    )
-                    .as_str(),
-                );
-            }
-            // Write hot aggregated results to a tsv file
-            if matches.get_flag("aggregate") {
-                write_results_aggregated(
-                    &hot_results,
-                    format!("/extern/results/{}-hot.aggregate.tsv", name),
-                )
-                .expect(
-                    format!(
-                        "Failed while writing aggregate results of hot run {} to file",
-                        name
-                    )
-                    .as_str(),
-                );
-            }
         }
+        // Save Results
+        save_results(&name, raw, aggregate, results, hot_results);
         // Clean Up
         conn.close()
             .expect(format!("Failed to close connection for {}", name).as_str());
         println!("End of Test: {}", name);
     }
-    clean_up();
-    println!("Finished Tests");
+}
+
+/// Write the results to their corresponding tsv files
+fn save_results(
+    name: &String,
+    raw: bool,
+    aggregate: bool,
+    results: Vec<TestResult>,
+    hot_results: Vec<TestResult>,
+) {
+    let _ = create_dir_all("/extern/results");
+    // Write raw results to a tsv file
+    if raw {
+        write_results(
+            &results,
+            File::create(format!("/extern/results/{}-cold.raw.tsv", name)).unwrap(),
+        )
+        .expect(
+            format!(
+                "Failed while writing raw results of cold run {} to file",
+                name
+            )
+            .as_str(),
+        );
+
+        if !hot_results.is_empty() {
+            write_results(
+                &hot_results,
+                File::create(format!("/extern/results/{}-hot.raw.tsv", name)).unwrap(),
+            )
+            .expect(
+                format!(
+                    "Failed while writing raw results of hot run {} to file",
+                    name
+                )
+                .as_str(),
+            );
+        }
+    }
+    // Write aggregated results to a tsv file
+    if aggregate {
+        write_results_aggregated(
+            &results,
+            File::create(format!("/extern/results/{}-cold.aggregate.tsv", name)).unwrap(),
+        )
+        .expect(
+            format!(
+                "Failed while writing aggregate results of cold run {} to file",
+                name
+            )
+            .as_str(),
+        );
+
+        if !hot_results.is_empty() {
+            write_results_aggregated(
+                &hot_results,
+                File::create(format!("/extern/results/{}-hot.aggregate.tsv", name)).unwrap(),
+            )
+            .expect(
+                format!(
+                    "Failed while writing aggregate results of hot run {} to file",
+                    name
+                )
+                .as_str(),
+            );
+        }
+    }
 }
 
 /// Struct storing info about the Performance Test
@@ -473,9 +507,9 @@ impl AggregateTestResult {
             );
             min = numbers.first().unwrap().to_string();
             max = numbers.last().unwrap().to_string();
-            quart_1 = numbers[numbers.len() / 4].to_string();
-            median = numbers[numbers.len() / 2].to_string();
-            quart_3 = numbers[numbers.len() * 3 / 4].to_string();
+            quart_1 = format!("{:.2}", (Self::percentile(&numbers, 0.25)));
+            median = format!("{:.2}", (Self::percentile(&numbers, 0.5)));
+            quart_3 = format!("{:.2}", (Self::percentile(&numbers, 0.75)));
             let mut occurences = HashMap::new();
             mode = numbers
                 .iter()
@@ -498,6 +532,23 @@ impl AggregateTestResult {
             avg,
             mode,
             failures: raw_result.failures.to_string(),
+        }
+    }
+
+    // Calculate Percentiles
+    fn percentile(sorted: &[u128], p: f64) -> f64 {
+        if sorted.len() == 1 {
+            return sorted[0] as f64;
+        }
+        let rank = p * (sorted.len() - 1) as f64;
+        let lo = rank.floor() as usize;
+        let hi = rank.ceil() as usize;
+        let frac = rank - lo as f64;
+        // If lo equals hi no in between value has to be calculated
+        if lo == hi {
+            sorted[lo] as f64
+        } else {
+            sorted[lo] as f64 * (1.0 - frac) + sorted[hi] as f64 * frac
         }
     }
 }
@@ -569,15 +620,18 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
 }
 
 /// Writes [`TestResult`]s to a tsv file.
-fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<dyn Error>> {
-    let mut writer = csv::WriterBuilder::new()
+fn write_results(
+    results: &Vec<TestResult>,
+    writer: impl std::io::Write,
+) -> Result<(), Box<dyn Error>> {
+    let mut tsv_writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .has_headers(false)
         .flexible(true)
-        .from_writer(File::create(filename.as_str())?);
+        .from_writer(writer);
 
     for result in results {
-        writer.serialize(result)?;
+        tsv_writer.serialize(result)?;
     }
 
     Ok(())
@@ -586,17 +640,17 @@ fn write_results(results: &Vec<TestResult>, filename: String) -> Result<(), Box<
 /// Aggregates [`TestResult`]s to min, median, mode, avg, max, 1st and 3rd quartile and writes it into a tsv file.
 fn write_results_aggregated(
     results: &Vec<TestResult>,
-    filename: String,
+    writer: impl std::io::Write,
 ) -> Result<(), Box<dyn Error>> {
-    let mut writer = csv::WriterBuilder::new()
+    let mut tsv_writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .has_headers(true)
-        .from_writer(File::create(filename.as_str())?);
+        .from_writer(writer);
 
     // Aggregate
     for result in results {
         let aggregate = AggregateTestResult::new(result);
-        writer.serialize(aggregate)?;
+        tsv_writer.serialize(aggregate)?;
     }
     Ok(())
 }
@@ -640,8 +694,12 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+    use std::fs::File;
+    use tempfile::TempDir;
+
     use super::*;
-    use std::assert_eq;
+    use std::{assert_eq, vec};
 
     // Unit Tests for TestResult struct
     #[test]
@@ -692,9 +750,9 @@ mod tests {
         // Test
         assert_eq!(agg.min, "25");
         assert_eq!(agg.max, "120");
-        assert_eq!(agg.quart_1, "25");
-        assert_eq!(agg.median, "50");
-        assert_eq!(agg.quart_3, "100");
+        assert_eq!(agg.quart_1, "30.50");
+        assert_eq!(agg.median, "50.00");
+        assert_eq!(agg.quart_3, "82.50");
         assert_eq!(agg.avg, "60.14");
         assert_eq!(agg.mode, "25");
         assert_eq!(agg.failures, "0")
@@ -735,11 +793,74 @@ mod tests {
         // Test
         assert_eq!(agg.min, "25");
         assert_eq!(agg.max, "120");
-        assert_eq!(agg.quart_1, "25");
-        assert_eq!(agg.median, "50");
-        assert_eq!(agg.quart_3, "100");
+        assert_eq!(agg.quart_1, "30.50");
+        assert_eq!(agg.median, "50.00");
+        assert_eq!(agg.quart_3, "82.50");
         assert_eq!(agg.avg, "60.14");
         assert_eq!(agg.mode, "25");
         assert_eq!(agg.failures, "10")
+    }
+
+    #[test]
+    fn test_write_results() {
+        // Setup
+        let tmpdir = TempDir::new().unwrap();
+        let tmpfile_path = tmpdir.path().join("result.tsv");
+        let tmp_file = File::create(tmpfile_path.clone()).unwrap();
+        let number_results: Vec<u128> = vec![
+            160, 20, 46, 129, 146, 197, 23, 4, 159, 107, 199, 200, 142, 122, 13, 78, 198, 167, 100,
+            65,
+        ];
+
+        let results: Vec<TestResult> = vec![TestResult {
+            id: 1,
+            failures: 1,
+            results: number_results.clone(),
+        }];
+
+        let mut concat: Vec<u128> = vec![1, 1];
+        concat.append(number_results.clone().as_mut());
+        let concat_string = concat
+            .iter()
+            .map(|it| it.to_string())
+            .collect::<Vec<String>>()
+            .join("\t")
+            + "\n";
+
+        assert!(write_results(&results, tmp_file).is_ok());
+
+        let mut file = File::open(tmpfile_path).unwrap();
+        let mut string = String::new();
+        let _ = file.read_to_string(&mut string);
+        assert_eq!(string, concat_string);
+    }
+
+    #[test]
+    fn test_write_results_aggregated() {
+        // Setup
+        let tmpdir = TempDir::new().unwrap();
+        let tmpfile_path = tmpdir.path().join("result.tsv");
+        let tmp_file = File::create(tmpfile_path.clone()).unwrap();
+        let number_results: Vec<u128> = vec![
+            160, 20, 46, 129, 146, 197, 23, 4, 159, 107, 199, 200, 142, 100, 13, 78, 198, 167, 100,
+            65,
+        ];
+
+        let results: Vec<TestResult> = vec![TestResult {
+            id: 1,
+            failures: 1,
+            results: number_results.clone(),
+        }];
+
+        assert!(write_results_aggregated(&results, tmp_file).is_ok());
+
+        let mut file = File::open(tmpfile_path).unwrap();
+        let mut string = String::new();
+        let _ = file.read_to_string(&mut string);
+        let result_string = concat!(
+            "min\tmax\tquart_1\tmedian\tquart_3\tavg\tmode\tfailures\n",
+            "4\t200\t60.25\t118.00\t161.75\t112.65\t100\t1\n"
+        );
+        assert_eq!(string, result_string);
     }
 }

@@ -136,15 +136,22 @@ impl QLeverConnection {
             let multi_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap().as_str();
             let json: Value =
                 serde_json::from_str(&multi_json.replace("\'", "\"").as_str()).unwrap();
-            let glob_cmd = format!(
+            let cmd = json["cmd"].as_str().unwrap();
+            if cmd.contains("gunzip") {
+                let glob_cmd = format!(
                 "/extern/data/{name}/{0}",
                 json["for-each"].as_str().unwrap()
-            );
-            for file in glob(glob_cmd.as_str()).unwrap() {
-                let file_path = file.unwrap();
-                let file_name = file_path.file_name().unwrap().to_str().unwrap();
-                let cmd = json["cmd"].as_str().unwrap().replace("{}", file_name);
-                command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str();
+                );
+                for file in glob(glob_cmd.as_str()).unwrap() {
+                    let file_path = file.unwrap();
+                    let file_name = file_path.file_name().unwrap().to_str().unwrap();
+                    let gunzip_cmd = json["cmd"].as_str().unwrap().replace("{}", file_name);
+                    command += format!(" -f <({gunzip_cmd}) -g - -F ttl -p false").as_str();
+                }
+            } else if cmd.contains("lbzcat") {
+                command += format!(" -f {{cmd}}").as_str();
+            } else {
+                panic!("Unknown cmd for getting qlever data {cmd}");
             }
         } else {
             // CAT_INPUT Format

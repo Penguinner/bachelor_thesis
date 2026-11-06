@@ -24,3 +24,7 @@ toml = "0.9.5"
 
 [features]
 duckdb = ["dep:duckdb"]
+
+[dev-dependencies]
+injectorpp = "0.5.1"
+tempfile = "3.27.0"
