@@ -1,17 +1,24 @@
-use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, Dataset, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
-use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
-use bollard::query_parameters::{CreateContainerOptionsBuilder, PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions, RestartContainerOptions};
+use crate::{
+    AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, Dataset, EDITOR_FILE,
+    PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE,
+    REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE,
+};
 use bollard::Docker;
+use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
+use bollard::query_parameters::{
+    CreateContainerOptionsBuilder, PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions,
+    RestartContainerOptions,
+};
 use futures::TryStreamExt;
 use postgres::{Client, NoTls, Row};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
+use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
-use std::process::Command;
 
 /// Connection for PostgreSQL Database
 pub struct PostgresConnection {
@@ -21,7 +28,6 @@ pub struct PostgresConnection {
 }
 
 impl PostgresConnection {
-
     pub fn new(dataset: Dataset) -> Result<Self, Box<dyn Error>> {
         // Startup Docker container
         let rt = Runtime::new()?;
@@ -36,17 +42,19 @@ impl PostgresConnection {
             }
 
             // Create Image
-            docker.create_image(
-                Some(
-                    bollard::query_parameters::CreateImageOptionsBuilder::default()
-                        .from_image(image)
-                        .build(),
-                ),
-                None,
-                None,
-            )
+            docker
+                .create_image(
+                    Some(
+                        bollard::query_parameters::CreateImageOptionsBuilder::default()
+                            .from_image(image)
+                            .build(),
+                    ),
+                    None,
+                    None,
+                )
                 .try_collect::<Vec<_>>()
-                .await.expect("Failed Creating Docker Image");
+                .await
+                .expect("Failed Creating Docker Image");
 
             let mut port_bindings = HashMap::new();
             port_bindings.insert(
@@ -56,50 +64,60 @@ impl PostgresConnection {
                     host_port: Some("5432".to_string()),
                 }]),
             );
-            
+
             // Create Container
             let config = ContainerCreateBody {
                 image: Some(image.into()),
                 env: Some(vec![
                     "POSTGRES_PASSWORD=password".to_string(),
                     "POSTGRES_USER=postgres".to_string(),
-                    "POSTGRES_DB=database".to_string()
+                    "POSTGRES_DB=database".to_string(),
                 ]),
                 host_config: Some(HostConfig {
                     port_bindings: Some(port_bindings),
                     ..Default::default()
                 }),
-                exposed_ports: Some( {
+                exposed_ports: Some({
                     let mut ports = HashMap::new();
-                    ports.insert("5432/tcp".to_string(),HashMap::new());
+                    ports.insert("5432/tcp".to_string(), HashMap::new());
                     ports
                 }),
                 ..Default::default()
             };
-            
-            let options = CreateContainerOptionsBuilder::default().name("postgres").build();
-            
-            let id = docker.create_container(
-                Some(options),
-                config,
-            )
+
+            let options = CreateContainerOptionsBuilder::default()
+                .name("postgres")
+                .build();
+
+            let id = docker
+                .create_container(Some(options), config)
                 .await
                 .expect("Failed to create Docker Container")
                 .id;
             // Start Container
-            docker.start_container(&id, None::<bollard::query_parameters::StartContainerOptions>).await.expect("Failed to start Docker Container");
+            docker
+                .start_container(
+                    &id,
+                    None::<bollard::query_parameters::StartContainerOptions>,
+                )
+                .await
+                .expect("Failed to start Docker Container");
             id
         });
-        
+
         // Connect to Postgres DB
         let client = create_client();
-        let mut conn = PostgresConnection { client, dataset: dataset.clone(), docker_id: id};
+        let mut conn = PostgresConnection {
+            client,
+            dataset: dataset.clone(),
+            docker_id: id,
+        };
         // Additional initialization depending on dataset
         match dataset {
             Dataset::Dblp => {
                 conn.create_tables_dblp();
                 conn.insert_dblp_data();
-            },
+            }
             Dataset::OsmPlanet => {
                 let _ = conn.client.execute("CREATE EXTENSION postgis;", &[]);
                 conn.insert_osm_data();
@@ -111,17 +129,28 @@ impl PostgresConnection {
 
     /// Restart Docker container to ensure cold running condition
     pub fn cooldown(&mut self) -> () {
-        let docker = Docker::connect_with_defaults().unwrap();
-        docker.restart_container("postgres", Some(RestartContainerOptions::default()));
+        let rt = Runtime::new().unwrap();
+        let handle = rt.handle();
+        let _ = handle.block_on(async {
+            let docker = Docker::connect_with_defaults().unwrap();
+            docker
+                .restart_container("postgres", Some(RestartContainerOptions::default()))
+                .await
+                .unwrap();
+        });
     }
 
     /// Load OSM planet data to postgres via osm2pgsql
     fn insert_osm_data(&self) {
         let file_path = format!("/extern/data/planet-latest.osm.pbf");
         let osm2pgsql = Command::new("bash")
-        .args(["-c", format!("osm2pgsql -c -d database -U postgres -H 172.17.0.1 -P 5432 {file_path}").as_str()])
-        .output()
-        .unwrap();
+            .args([
+                "-c",
+                format!("osm2pgsql -c -d database -U postgres -H 172.17.0.1 -P 5432 {file_path}")
+                    .as_str(),
+            ])
+            .output()
+            .unwrap();
         println!("status: {}", &osm2pgsql.status);
         println!("stdout:\n{}", String::from_utf8_lossy(&osm2pgsql.stdout));
         println!("stderr:\n{}", String::from_utf8_lossy(&osm2pgsql.stderr));
@@ -151,15 +180,20 @@ impl PostgresConnection {
             ("PublicationAuthors", PUBLICATION_AUTHORS_FILE),
             ("AuthorWebsites", AUTHOR_WEBSITES_FILE),
             ("Affiliations", AFFILIATIONS_FILE),
-            ("Alias", ALIAS_FILE)
+            ("Alias", ALIAS_FILE),
         ];
         let mut transaction = self.client.transaction().unwrap();
         // Iterate over the tables to add
         for (table, file) in queries.iter() {
             let file = File::open(file).unwrap();
             let mut reader = BufReader::new(file);
-            let mut sink = transaction.copy_in(&format!("COPY {} FROM STDIN (FORMAT CSV, DELIMITER E'\\t', HEADER true)", table)).unwrap();
-            
+            let mut sink = transaction
+                .copy_in(&format!(
+                    "COPY {} FROM STDIN (FORMAT CSV, DELIMITER E'\\t', HEADER true)",
+                    table
+                ))
+                .unwrap();
+
             let mut buffer = String::new();
             loop {
                 let bytes_read = reader.read_line(&mut buffer).unwrap();
@@ -174,7 +208,7 @@ impl PostgresConnection {
         transaction.commit().unwrap();
         println!("Inserted DBLP data into Postgres");
     }
-    
+
     /// Run a test query on the PostgreSQL database.
     pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Recreate client if connection was closed
@@ -193,7 +227,7 @@ impl PostgresConnection {
             .append(true)
             .open(format!("/extern/data/postgres.{}.log", self.dataset.name()))
             .unwrap();
-        
+
         let logmsg: String;
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(data) => {
@@ -202,19 +236,25 @@ impl PostgresConnection {
                 if let Some(row) = data.get(0) {
                     columns = row.len();
                 }
-                logmsg = format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}\n", query, duration, columns, data.len());
+                logmsg = format!(
+                    "Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}\n",
+                    query,
+                    duration,
+                    columns,
+                    data.len()
+                );
                 Ok(duration)
-            },
+            }
             Err(e) => {
                 logmsg = format!("Query: {0} failed\n{1}", query, e);
                 Err(e.into())
             }
         };
         let _ = file.write(logmsg.as_bytes());
-        
+
         result
     }
-    
+
     // Close connection by stopping and removing the container.
     pub fn close(&mut self) -> Result<(), Box<dyn Error>> {
         //Stop docker container
@@ -224,18 +264,33 @@ impl PostgresConnection {
         handle.block_on(async {
             let docker = Docker::connect_with_defaults().unwrap();
 
-            docker.stop_container(
-                self.docker_id.as_str(),
-                None::<bollard::query_parameters::StopContainerOptions>
-            ).await.unwrap();
+            docker
+                .stop_container(
+                    self.docker_id.as_str(),
+                    None::<bollard::query_parameters::StopContainerOptions>,
+                )
+                .await
+                .unwrap();
 
-            docker.remove_container(self.docker_id.as_str(), None::<bollard::query_parameters::RemoveContainerOptions>).await.unwrap();
+            docker
+                .remove_container(
+                    self.docker_id.as_str(),
+                    None::<bollard::query_parameters::RemoveContainerOptions>,
+                )
+                .await
+                .unwrap();
 
-            docker.prune_volumes(None::<PruneVolumesOptions>).await;
-            docker.prune_build(None::<PruneBuildOptions>).await;
-            docker.prune_images(None::<PruneImagesOptions>).await;
+            docker
+                .prune_volumes(None::<PruneVolumesOptions>)
+                .await
+                .unwrap();
+            docker.prune_build(None::<PruneBuildOptions>).await.unwrap();
+            docker
+                .prune_images(None::<PruneImagesOptions>)
+                .await
+                .unwrap();
         });
-        
+
         Ok(())
     }
 }
@@ -247,7 +302,7 @@ impl Drop for PostgresConnection {
 }
 
 /// Create a new client to access the database
-pub fn create_client() -> Client{
+pub fn create_client() -> Client {
     let host = if cfg!(target_os = "linux") {
         "172.17.0.1"
     } else {
@@ -266,11 +321,11 @@ pub fn create_client() -> Client{
             Ok(cli) => {
                 client = cli;
                 break;
-            },
-            Err(_) if  retries < max_retries => {
+            }
+            Err(_) if retries < max_retries => {
                 retries += 1;
                 sleep(Duration::from_secs(2));
-            },
+            }
             Err(e) => {
                 panic!("Failed to connect to database: {}", e);
             }

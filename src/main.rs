@@ -7,17 +7,17 @@ use async_compression::tokio::bufread::GzipDecoder;
 use clap::{Arg, ArgAction, ArgGroup, command, value_parser};
 use csv::ReaderBuilder;
 use futures::TryStreamExt;
+use itertools::iproduct;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, create_dir_all, remove_dir_all};
 use std::io::Write;
 use std::process::Command;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
-use itertools::iproduct;
 
 #[cfg(feature = "duckdb")]
 mod duckdb_connector;
@@ -110,12 +110,12 @@ fn main() {
         .group(
             ArgGroup::new("dataset")
                 .args(["dblp", "osm-planet"])
-                .multiple(true)
+                .multiple(true),
         )
         .get_matches();
-    
+
     let iter = matches.get_one::<usize>("iter").unwrap().to_owned();
-    
+
     // Register database to be tested
     let mut dbs: Vec<Database> = Vec::new();
     if matches.get_flag("qlever") {
@@ -136,11 +136,16 @@ fn main() {
     if matches.get_flag("dblp") {
         datasets.push(Dataset::Dblp);
         // Download and Parse dblp data for sql use
-        if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+        if dbs
+            .iter()
+            .any(|x| x.name() == "duckdb" || x.name() == "postgres")
+        {
             let rt = Runtime::new().unwrap();
             let handle = rt.handle();
 
-            let _ = handle.block_on(download_dblp_data("/extern/data/dblp.xml".into())).unwrap();
+            let _ = handle
+                .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
+                .unwrap();
             let mut parser = Parser::new("/extern/data/dblp.xml");
             parser.run();
             println!("Finished Parsing DBLP data");
@@ -149,7 +154,10 @@ fn main() {
     if matches.get_flag("osm-planet") {
         datasets.push(Dataset::OsmPlanet);
         // Download osm-planet data
-        if dbs.iter().any(|x| x.name() == "duckdb" || x.name() == "postgres") {
+        if dbs
+            .iter()
+            .any(|x| x.name() == "duckdb" || x.name() == "postgres")
+        {
             let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
             println!("Downloading {url}");
             let client = reqwest::blocking::Client::builder()
@@ -165,7 +173,7 @@ fn main() {
 
     // Create cross join between datasets and databases
     let tests: Vec<Test> = iproduct!(dbs, datasets)
-        .map(|(db, dataset)| Test {db, dataset})
+        .map(|(db, dataset)| Test { db, dataset })
         .collect();
 
     // Run Tests
@@ -175,7 +183,8 @@ fn main() {
         let query_file = test.dataset.get_query_file();
         println!("Start of Test: {}", name);
         // Create Connection and insert Data
-        let mut conn = test.db
+        let mut conn = test
+            .db
             .to_connection(test.dataset)
             .expect(format!("Failed to create connection for {}", name).as_str());
         // Run Queries
@@ -195,17 +204,14 @@ fn main() {
         }
         // Write aggregated results to a tsv file
         if matches.get_flag("aggregate") {
-            write_results_aggregated(
-                &results,
-                format!("/extern/results/{}.aggregate.tsv", name),
-            )
-            .expect(
-                format!(
-                    "Failed while writing aggregate results of cold run {} to file",
-                    name
-                )
-                .as_str(),
-            );
+            write_results_aggregated(&results, format!("/extern/results/{}.aggregate.tsv", name))
+                .expect(
+                    format!(
+                        "Failed while writing aggregate results of cold run {} to file",
+                        name
+                    )
+                    .as_str(),
+                );
         }
         // If hot flag is present do another run with no cache clearing or cooldown
         if matches.get_flag("hot") {
@@ -213,7 +219,11 @@ fn main() {
                 .expect(format!("Failed while testing hotrun for {}", name).as_str());
             // Write hot raw results to a tsv file
             if matches.get_flag("raw") {
-                write_results(&hot_results, format!("/extern/results/{}-hot.raw.tsv", name)).expect(
+                write_results(
+                    &hot_results,
+                    format!("/extern/results/{}-hot.raw.tsv", name),
+                )
+                .expect(
                     format!(
                         "Failed while writing raw results of hot run {} to file",
                         name
@@ -237,7 +247,8 @@ fn main() {
             }
         }
         // Clean Up
-        conn.close().expect(format!("Failed to close connection for {}", name).as_str());
+        conn.close()
+            .expect(format!("Failed to close connection for {}", name).as_str());
         println!("End of Test: {}", name);
     }
     clean_up();
@@ -247,11 +258,10 @@ fn main() {
 /// Struct storing info about the Performance Test
 pub struct Test {
     db: Database,
-    dataset: Dataset
+    dataset: Dataset,
 }
 
 impl Test {
-
     /// Returns the name of the test, in the format "{database name}-{dataset name}".
     pub fn name(&self) -> String {
         let name = format!("{}-{}", self.db.name(), self.dataset.name());
@@ -261,13 +271,12 @@ impl Test {
 
 /// Defines a dataset via the [`name`](Dataset::name) and [`get_query_file`](Dataset::get_query_file) function.
 #[derive(Clone)]
-enum Dataset {
+pub enum Dataset {
     Dblp,
     OsmPlanet,
 }
 
 impl Dataset {
-
     /// Returns the corresponding query file to be used for the tests.
     pub fn get_query_file(&self) -> String {
         match self {
@@ -289,7 +298,7 @@ impl Dataset {
     pub fn is_geo(&self) -> bool {
         match self {
             Dataset::OsmPlanet => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -297,7 +306,7 @@ impl Dataset {
 /// Defines Database via [`name`](Database::name) function.
 /// Creates a corresponding [`Connection`] with [`to_connection`](Database::to_connection).
 #[derive(Clone)]
-enum Database {
+pub enum Database {
     QLever,
     #[cfg(feature = "duckdb")]
     DuckDB,
@@ -305,7 +314,6 @@ enum Database {
 }
 
 impl Database {
-
     /// Returns name of database
     pub fn name(&self) -> &str {
         match self {
@@ -331,7 +339,6 @@ impl Database {
 /// Defines structure of query file, in tsv format, to be read.
 #[derive(Debug, Deserialize)]
 pub struct TSVRecord {
-    name: String,
     postgresql: String,
     #[cfg(feature = "duckdb")]
     duckdb: String,
@@ -362,7 +369,6 @@ pub enum Connection {
 }
 
 impl Connection {
-
     /// Runs a test for a given [`TSVRecord`] expressing a query.
     /// Passes test query parameters to connection.
     pub fn run_test_query(&mut self, record: &TSVRecord) -> Result<u128, Box<dyn Error>> {
@@ -384,13 +390,9 @@ impl Connection {
                 connection.cooldown();
             }
             #[cfg(feature = "duckdb")]
-            Connection::DuckDB(connection) => {
-                connection.cooldown()
-            }
-            Connection::PostGres(connection) => {
-                connection.cooldown()
-            }
-        }
+            Connection::DuckDB(connection) => connection.cooldown(),
+            Connection::PostGres(connection) => connection.cooldown(),
+        };
     }
 
     /// Closes the connection.
@@ -422,10 +424,13 @@ pub struct TestResult {
 }
 
 impl TestResult {
-
     /// Create new TestResult
     pub fn new(id: usize) -> TestResult {
-        TestResult { id, results: Vec::new(), failures: 0 }
+        TestResult {
+            id,
+            results: Vec::new(),
+            failures: 0,
+        }
     }
 
     pub fn add_time(&mut self, time: u128) {
@@ -451,7 +456,6 @@ pub struct AggregateTestResult {
 }
 
 impl AggregateTestResult {
-
     pub fn new(raw_result: &TestResult) -> AggregateTestResult {
         let mut numbers = raw_result.results.clone();
         let mut min: String = String::from("-");
@@ -463,12 +467,15 @@ impl AggregateTestResult {
         let mut mode: String = String::from("-");
         if !numbers.is_empty() {
             numbers.sort();
-            avg = format!("{:.2}",(numbers.iter().sum::<u128>() as f64 / numbers.len() as f64));
+            avg = format!(
+                "{:.2}",
+                (numbers.iter().sum::<u128>() as f64 / numbers.len() as f64)
+            );
             min = numbers.first().unwrap().to_string();
             max = numbers.last().unwrap().to_string();
-            quart_1 = numbers[numbers.len()/4].to_string();
+            quart_1 = numbers[numbers.len() / 4].to_string();
             median = numbers[numbers.len() / 2].to_string();
-            quart_3 = numbers[numbers.len()*3/4].to_string();
+            quart_3 = numbers[numbers.len() * 3 / 4].to_string();
             let mut occurences = HashMap::new();
             mode = numbers
                 .iter()
@@ -482,7 +489,16 @@ impl AggregateTestResult {
                 .to_string();
         }
 
-        AggregateTestResult { min, max, quart_1, median, quart_3, avg, mode, failures: raw_result.failures.to_string() }
+        AggregateTestResult {
+            min,
+            max,
+            quart_1,
+            median,
+            quart_3,
+            avg,
+            mode,
+            failures: raw_result.failures.to_string(),
+        }
     }
 }
 
@@ -522,7 +538,7 @@ fn run_test(
             match result {
                 Ok(time) => {
                     results[id].add_time(time);
-                },
+                }
                 Err(_) => {
                     results[id].inc_failures();
                 }
@@ -545,7 +561,8 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
         return Err(format!(
             "drop_caches failed: {}",
             String::from_utf8_lossy(&out.stderr)
-        ).into());
+        )
+        .into());
     }
 
     Ok(())
@@ -585,7 +602,7 @@ fn write_results_aggregated(
 }
 
 fn clean_up() -> () {
-    remove_dir_all("/extern/data/");
+    let _ = remove_dir_all("/extern/data/");
 }
 
 /// Downloads the xml GZIP archive for the dblp dataset.
@@ -623,16 +640,15 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_eq;
     use super::*;
-
+    use std::assert_eq;
 
     // Unit Tests for TestResult struct
     #[test]
     fn test_test_result_creation() {
         let result = TestResult::new(10);
 
-        assert_eq!(result.id,10);
+        assert_eq!(result.id, 10);
         assert_eq!(result.failures, 0);
         assert_eq!(result.results.len(), 0);
     }
@@ -646,7 +662,7 @@ mod tests {
         result.add_time(200);
 
         assert_eq!(result.results.len(), 1);
-        assert_eq!(result.results[0],200);
+        assert_eq!(result.results[0], 200);
     }
 
     #[test]

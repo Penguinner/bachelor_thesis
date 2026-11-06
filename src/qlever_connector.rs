@@ -1,19 +1,19 @@
+use bollard::Docker;
+use bollard::query_parameters::{PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions};
 use core::panic;
-use std::collections::HashMap;
+use glob::glob;
+use regex::{Captures, Regex};
 use reqwest::header;
 use serde::Deserialize;
-use std::{eprintln, fs};
+use serde_json::Value;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use bollard::Docker;
-use bollard::query_parameters::{PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions};
-use glob::glob;
-use regex::{Captures, Regex};
-use serde_json::Value;
+use std::{eprintln, fs};
 use tokio::runtime::Runtime;
 
 use crate::Dataset;
@@ -21,11 +21,10 @@ use crate::Dataset;
 /// Connection for QLever database
 pub struct QLeverConnection {
     docker_id: String,
-    qlever_file: QleverFile
+    qlever_file: QleverFile,
 }
 
 impl QLeverConnection {
-    
     /// Create a new [`QLeverConnection`]
     pub fn new(dataset: Dataset) -> Result<QLeverConnection, Box<dyn Error>> {
         // Read Config for dataset
@@ -53,19 +52,26 @@ impl QLeverConnection {
             .no_proxy()
             .build()
             .unwrap();
-        let res = client.get(format!("http://127.0.0.1:{port}/?cmd=clear-cache-complete&access-token=benchmark"))
+        let res = client
+            .get(format!(
+                "http://127.0.0.1:{port}/?cmd=clear-cache-complete&access-token=benchmark"
+            ))
             .send();
         if let Err(e) = res {
             panic!("{}", e)
         }
     }
-    
+
     /// Get the QLeverfile from the qlever-control repository and parse it for our purpose
     fn setup_config(dataset: Dataset) -> QleverFile {
         // Fetch File
         let target = match dataset {
-            Dataset::Dblp => "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp",
-            Dataset::OsmPlanet => "https://raw.githubusercontent.com/qlever-dev/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-planet",
+            Dataset::Dblp => {
+                "https://raw.githubusercontent.com/ad-freiburg/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.dblp"
+            }
+            Dataset::OsmPlanet => {
+                "https://raw.githubusercontent.com/qlever-dev/qlever-control/refs/heads/main/src/qlever/Qleverfiles/Qleverfile.osm-planet"
+            }
         };
         let response = reqwest::blocking::get(target).unwrap();
         let content = response.text().unwrap();
@@ -73,24 +79,35 @@ impl QLeverConnection {
         let sanitized = sanitize_toml(content);
         return toml::from_str::<QleverFile>(sanitized.as_str()).unwrap();
     }
-    
+
     /// Get Data for dataset defined by GET_DATA_CMD in QLeverfile
     fn get_data(qlever_file: &QleverFile) {
-        command_assist("bash",
-                       &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()],
-                       format!("/extern/data/{}", qlever_file.data.get("NAME").unwrap()).as_str()
-        ).unwrap();
+        command_assist(
+            "bash",
+            &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()],
+            format!("/extern/data/{}", qlever_file.data.get("NAME").unwrap()).as_str(),
+        )
+        .unwrap();
     }
-    
+
     /// Start indexing for QLever
     fn index(qlever_file: &QleverFile) {
         // create settings json
         let name = qlever_file.data.get("NAME").unwrap().as_str();
         let path = format!("/extern/data/{name}/{name}.settings.json");
         let mut file = File::create(path.clone()).unwrap();
-        file.write_all(qlever_file.index.get("SETTINGS_JSON").unwrap().as_str().replace("\'","\"").as_bytes()).unwrap();
+        file.write_all(
+            qlever_file
+                .index
+                .get("SETTINGS_JSON")
+                .unwrap()
+                .as_str()
+                .replace("\'", "\"")
+                .as_bytes(),
+        )
+        .unwrap();
         // Create Index
-        let mut command = format!{
+        let mut command = format! {
             "docker run --rm -u $(id -u):$(id -g) \
             -v /etc/localtime:/etc/localtime:ro \
             -v ~/extern/data/{name}:/index \
@@ -102,30 +119,44 @@ impl QLeverConnection {
             -c '"
         };
 
-        
         // Add files arguments
         let mut vocab = "on-disk-compressed";
         if let Some(vocabulary) = qlever_file.index.get("VOCABULARY_TYPE") {
             vocab = vocabulary;
         }
-        if qlever_file.index.contains_key("MULTI_INPUT_JSON") { // MULTI_INPUT_JSON Format
-            command += format!("qlever-index \
+        if qlever_file.index.contains_key("MULTI_INPUT_JSON") {
+            // MULTI_INPUT_JSON Format
+            command += format!(
+                "qlever-index \
             -i {name} \
             -s {name}.settings.json \
-            --vocabulary-type {vocab}").as_str();
+            --vocabulary-type {vocab}"
+            )
+            .as_str();
             let multi_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap().as_str();
-            let json: Value = serde_json::from_str(&multi_json.replace("\'","\"").as_str()).unwrap();
-            let glob_cmd = format!("/extern/data/{name}/{0}", json["for-each"].as_str().unwrap());
+            let json: Value =
+                serde_json::from_str(&multi_json.replace("\'", "\"").as_str()).unwrap();
+            let glob_cmd = format!(
+                "/extern/data/{name}/{0}",
+                json["for-each"].as_str().unwrap()
+            );
             for file in glob(glob_cmd.as_str()).unwrap() {
                 let file_path = file.unwrap();
                 let file_name = file_path.file_name().unwrap().to_str().unwrap();
                 let cmd = json["cmd"].as_str().unwrap().replace("{}", file_name);
                 command += format!(" -f <({cmd}) -g - -F ttl -p false").as_str();
             }
-        } else { // CAT_INPUT Format
-            command += qlever_file.index.get("CAT_INPUT_FILES").unwrap().as_str().replace("zcat", "ulimit -Sn 500000 && zcat").as_str();
+        } else {
+            // CAT_INPUT Format
+            command += qlever_file
+                .index
+                .get("CAT_INPUT_FILES")
+                .unwrap()
+                .as_str()
+                .replace("zcat", "ulimit -Sn 500000 && zcat")
+                .as_str();
             let stxxl = qlever_file.index.get("STXXL_MEMORY").unwrap();
-            
+
             command += format!(
                 "| qlever-index \
                 -i {name} \
@@ -133,10 +164,13 @@ impl QLeverConnection {
                 --vocabulary-type {vocab} -F ttl -f - \
                 --stxxl-memory {stxxl}\
                 "
-            ).as_str();
+            )
+            .as_str();
         }
 
-        if let Some(value) = qlever_file.index.get("PARALLEL_PARSING") && value == "true" {
+        if let Some(value) = qlever_file.index.get("PARALLEL_PARSING")
+            && value == "true"
+        {
             command += " -p true";
         }
 
@@ -144,7 +178,6 @@ impl QLeverConnection {
         // Execute Index command
         command_assist("bash", &["-c", command.as_str()], ".").unwrap()
     }
-    
 
     /// Start the QLever server
     fn start(qlever_file: &QleverFile) -> QLeverConnection {
@@ -190,7 +223,7 @@ impl QLeverConnection {
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         let mut conn = QLeverConnection {
             qlever_file: qlever_file.clone(),
-            docker_id: format!("qlever.server.{name}")
+            docker_id: format!("qlever.server.{name}"),
         };
         // Test connection
         conn.wait_for_connect();
@@ -221,10 +254,7 @@ impl QLeverConnection {
             }
 
             // Increase Backoff time up to 3s
-            let backoff_ms = std::cmp::min(
-                200u64 << (attempts-1).min(4), 
-                3000
-            );
+            let backoff_ms = std::cmp::min(200u64 << (attempts - 1).min(4), 3000);
             let sleep_for = Duration::from_millis(backoff_ms.min(remaining.as_millis() as u64));
 
             eprintln!(
@@ -236,7 +266,7 @@ impl QLeverConnection {
             sleep(sleep_for);
         }
     }
-    
+
     /// Stop the QLever docker container
     pub fn stop(&self) -> Result<(), Box<dyn Error>> {
         //Stop docker container
@@ -246,60 +276,84 @@ impl QLeverConnection {
         handle.block_on(async {
             let docker = Docker::connect_with_defaults().unwrap();
 
-            docker.stop_container(
-                self.docker_id.as_str(),
-                None::<bollard::query_parameters::StopContainerOptions>
-            ).await.unwrap();
+            docker
+                .stop_container(
+                    self.docker_id.as_str(),
+                    None::<bollard::query_parameters::StopContainerOptions>,
+                )
+                .await
+                .unwrap();
 
-            docker.remove_container(self.docker_id.as_str(), None::<bollard::query_parameters::RemoveContainerOptions>).await.unwrap();
+            docker
+                .remove_container(
+                    self.docker_id.as_str(),
+                    None::<bollard::query_parameters::RemoveContainerOptions>,
+                )
+                .await
+                .unwrap();
 
-            docker.prune_volumes(None::<PruneVolumesOptions>).await;
-            docker.prune_build(None::<PruneBuildOptions>).await;
-            docker.prune_images(None::<PruneImagesOptions>).await;
+            docker
+                .prune_volumes(None::<PruneVolumesOptions>)
+                .await
+                .unwrap();
+            docker.prune_build(None::<PruneBuildOptions>).await.unwrap();
+            docker
+                .prune_images(None::<PruneImagesOptions>)
+                .await
+                .unwrap();
         });
 
         Ok(())
     }
 
     /// Run a test query on QLever
-    pub fn run_test_query(&mut self, query: &str) -> Result<u128 , Box<dyn Error>> {
+    pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Run query
         let response = self.do_query_request(query);
         // Write results to log
         let logmsg: String;
         let result: Result<u128, Box<dyn Error>> = match response {
-            Ok((time,rows, columns)) => {
-                logmsg = format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, time, columns, rows);
+            Ok((time, rows, columns)) => {
+                logmsg = format!(
+                    "Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}",
+                    query, time, columns, rows
+                );
                 Ok(time)
-            },
+            }
             Err(e) => {
                 logmsg = format!("Query: {0} failed\n{1}", query, e);
                 Err(e)
             }
         };
-        let filepath: String = format!("/extern/data/qlever.{}.log", self.qlever_file.data.get("NAME").unwrap());
+        let filepath: String = format!(
+            "/extern/data/qlever.{}.log",
+            self.qlever_file.data.get("NAME").unwrap()
+        );
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
             .open(filepath)
             .unwrap();
-        let _ = file.write(
-            logmsg.as_bytes()
-        );
-        
+        let _ = file.write(logmsg.as_bytes());
+
         result
     }
-    
+
     /// Make a request to the QLever server with a query
     fn do_query_request(&mut self, query: &str) -> Result<(u128, usize, usize), Box<dyn Error>> {
-        let port = self.qlever_file.server.get("PORT").ok_or("Failed reading Port from file")?.as_str();
+        let port = self
+            .qlever_file
+            .server
+            .get("PORT")
+            .ok_or("Failed reading Port from file")?
+            .as_str();
         // Create Headers
         let mut headers = header::HeaderMap::new();
         headers.insert("Accept", "application/qlever-results+json".parse().unwrap());
         headers.insert("Content-type", "application/sparql-query".parse().unwrap());
 
-        // Create reqwest client 
+        // Create reqwest client
         let client = reqwest::blocking::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy()
@@ -307,103 +361,140 @@ impl QLeverConnection {
             .build()?;
         let query = query.to_string();
         // Do Post request with query
-        let res = client.post(format!("http://127.0.0.1:{port}"))
+        let res = client
+            .post(format!("http://127.0.0.1:{port}"))
             .headers(headers)
             .body(query)
             .send()?
             .error_for_status();
-        
+
         // Check for http Errors
-        if let Err(err) = res{
-            return Err(err.into())
+        if let Err(err) = res {
+            return Err(err.into());
         }
 
         // Parse Result into JsonResult
         let text = res.unwrap().text().unwrap();
         let result: JsonResult = serde_json::from_str(&text)?;
-        
+
         // Convert time from "Xms" into integer
-        let time: u128 = result.time.total.chars()
+        let time: u128 = result
+            .time
+            .total
+            .chars()
             .take_while(|c| c.is_ascii_digit())
             .collect::<String>()
             .parse::<u128>()?;
-        
-        Ok((time, result.runtime.query_execution_tree.result_rows, result.runtime.query_execution_tree.result_cols))
+
+        Ok((
+            time,
+            result.runtime.query_execution_tree.result_rows,
+            result.runtime.query_execution_tree.result_cols,
+        ))
     }
 }
 
-/// Datastruct for converted QLeverfile 
+/// Datastruct for converted QLeverfile
 #[derive(Deserialize, Clone)]
 pub struct QleverFile {
     pub data: HashMap<String, String>,
     pub index: HashMap<String, String>,
     pub server: HashMap<String, String>,
-    #[serde(flatten)]
-    pub others: HashMap<String, toml::Value>,
 }
 
 impl QleverFile {
-
     /// Replaces variables inside the QLeverfile with the corresponding value
     pub fn replace_internal_variables(&mut self) {
         let regex = Regex::new(r"\$\{(?<prefix>\w+:)?(?<key>\w+)}").unwrap();
         // Iterate over Data
-        self.data = self.data.iter().map(|(orig_key, value)| {
-            let mut changed = value.clone();
-            while regex.is_match(changed.as_str()) {
-                changed = regex.replace_all(changed.as_str(), |cap: &Captures|{
-                    let prefix = cap.name("prefix");
-                    let key = cap.name("key").unwrap().as_str();
-                    match prefix {
-                        Some(prefix) if prefix.as_str() == "data:" => self.data.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "index:" => self.index.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "server:" => self.server.get(key).unwrap(),
-                        None | Some(_) => self.data.get(key).unwrap()
-                    }
+        self.data = self
+            .data
+            .iter()
+            .map(|(orig_key, value)| {
+                let mut changed = value.clone();
+                while regex.is_match(changed.as_str()) {
+                    changed = regex
+                        .replace_all(changed.as_str(), |cap: &Captures| {
+                            let prefix = cap.name("prefix");
+                            let key = cap.name("key").unwrap().as_str();
+                            match prefix {
+                                Some(prefix) if prefix.as_str() == "data:" => {
+                                    self.data.get(key).unwrap()
+                                }
+                                Some(prefix) if prefix.as_str() == "index:" => {
+                                    self.index.get(key).unwrap()
+                                }
+                                Some(prefix) if prefix.as_str() == "server:" => {
+                                    self.server.get(key).unwrap()
+                                }
+                                None | Some(_) => self.data.get(key).unwrap(),
+                            }
+                        })
+                        .to_string();
                 }
-                ).to_string();
-            }
-            (orig_key.to_string(), changed)
-        }).collect();
+                (orig_key.to_string(), changed)
+            })
+            .collect();
         // Iterate over Index
-        self.index = self.index.iter().map(|(orig_key, value)| {
-            let mut changed = value.clone();
-            while regex.is_match(changed.as_str()) {
-                changed = regex.replace_all(changed.as_str(), |cap: &Captures|{
-                    let prefix = cap.name("prefix");
-                    let key = cap.name("key").unwrap().as_str();
-                    match prefix {
-                        Some(prefix) if prefix.as_str() == "data:" => self.data.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "index:" => self.index.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "server:" => self.server.get(key).unwrap(),
-                        None | Some(_) => self.index.get(key).unwrap()
-                    }
+        self.index = self
+            .index
+            .iter()
+            .map(|(orig_key, value)| {
+                let mut changed = value.clone();
+                while regex.is_match(changed.as_str()) {
+                    changed = regex
+                        .replace_all(changed.as_str(), |cap: &Captures| {
+                            let prefix = cap.name("prefix");
+                            let key = cap.name("key").unwrap().as_str();
+                            match prefix {
+                                Some(prefix) if prefix.as_str() == "data:" => {
+                                    self.data.get(key).unwrap()
+                                }
+                                Some(prefix) if prefix.as_str() == "index:" => {
+                                    self.index.get(key).unwrap()
+                                }
+                                Some(prefix) if prefix.as_str() == "server:" => {
+                                    self.server.get(key).unwrap()
+                                }
+                                None | Some(_) => self.index.get(key).unwrap(),
+                            }
+                        })
+                        .to_string();
                 }
-                ).to_string();
-            }
-            (orig_key.to_string(), changed)
-        }).collect();
+                (orig_key.to_string(), changed)
+            })
+            .collect();
         // Iterate over Server
-        self.server = self.server.iter().map(|(orig_key, value)| {
-            let mut changed = value.clone();
-            while regex.is_match(changed.as_str()) {
-                changed = regex.replace_all(changed.as_str(), |cap: &Captures|{
-                    let prefix = cap.name("prefix");
-                    let key = cap.name("key").unwrap().as_str();
-                    match prefix {
-                        Some(prefix) if prefix.as_str() == "data:" => self.data.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "index:" => self.index.get(key).unwrap(),
-                        Some(prefix) if prefix.as_str() == "server:" => self.server.get(key).unwrap(),
-                        None | Some(_) => self.server.get(key).unwrap()
-                    }
+        self.server = self
+            .server
+            .iter()
+            .map(|(orig_key, value)| {
+                let mut changed = value.clone();
+                while regex.is_match(changed.as_str()) {
+                    changed = regex
+                        .replace_all(changed.as_str(), |cap: &Captures| {
+                            let prefix = cap.name("prefix");
+                            let key = cap.name("key").unwrap().as_str();
+                            match prefix {
+                                Some(prefix) if prefix.as_str() == "data:" => {
+                                    self.data.get(key).unwrap()
+                                }
+                                Some(prefix) if prefix.as_str() == "index:" => {
+                                    self.index.get(key).unwrap()
+                                }
+                                Some(prefix) if prefix.as_str() == "server:" => {
+                                    self.server.get(key).unwrap()
+                                }
+                                None | Some(_) => self.server.get(key).unwrap(),
+                            }
+                        })
+                        .to_string();
                 }
-                ).to_string();
-            }
-            (orig_key.to_string(), changed)
-        }).collect();
+                (orig_key.to_string(), changed)
+            })
+            .collect();
     }
 }
-
 
 /// Response deserialization struct
 #[derive(Deserialize)]
@@ -420,7 +511,7 @@ struct JsonTime {
 
 #[derive(Deserialize)]
 struct JsonRuntimeInfo {
-    query_execution_tree : JsonQueryExecTree
+    query_execution_tree: JsonQueryExecTree,
 }
 
 #[derive(Deserialize)]
@@ -430,20 +521,34 @@ struct JsonQueryExecTree {
 }
 
 /// Utility function for executing commands in the right directory
-fn command_assist(command_str: &str, args: &[&str], current_dir: &str) -> Result<(), Box<dyn Error>> {
+fn command_assist(
+    command_str: &str,
+    args: &[&str],
+    current_dir: &str,
+) -> Result<(), Box<dyn Error>> {
     let command = Command::new(command_str)
         .args(args)
         .current_dir(current_dir)
         .output()
-        .expect(("Failed executing command ".to_string() + command_str + " " + args.join(" ").as_str()).as_ref());
-    println!("executed_command: {}", command_str.to_string() + " " + args.join(" ").as_str());
+        .expect(
+            ("Failed executing command ".to_string() + command_str + " " + args.join(" ").as_str())
+                .as_ref(),
+        );
+    println!(
+        "executed_command: {}",
+        command_str.to_string() + " " + args.join(" ").as_str()
+    );
     println!("status: {}", &command.status);
     println!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
     println!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
     if command.status.success() {
         Ok(())
     } else {
-        Err(format!("Command failed status code: {0}\nCommand: {1} {2:?}", command.status, command_str, args).into())
+        Err(format!(
+            "Command failed status code: {0}\nCommand: {1} {2:?}",
+            command.status, command_str, args
+        )
+        .into())
     }
 }
 
@@ -455,22 +560,24 @@ fn sanitize_toml(string: String) -> String {
     // Remove Comments
     let mut new_toml = comments.replace_all(string.as_str(), "").to_string();
     // Replace double quotes with single quotes
-    new_toml = new_toml.as_str().replace("\"","\'").to_string();
+    new_toml = new_toml.as_str().replace("\"", "\'").to_string();
     // Wrap properties in double quotes
-    new_toml = jsons.replace_all(new_toml.as_str(), |caps: &Captures| {
-        let word = caps[1].to_string();
-        format!("= \"{word}\"")
-    }).to_string();
+    new_toml = jsons
+        .replace_all(new_toml.as_str(), |caps: &Captures| {
+            let word = caps[1].to_string();
+            format!("= \"{word}\"")
+        })
+        .to_string();
     new_toml.trim().to_string()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::assert_eq;
     use super::*;
+    use std::assert_eq;
 
     fn test_file() -> String {
-        include_str!("test-data/test_file.qlever").to_string()
+        include_str!("test-data/test_qleverfile.toml").to_string()
     }
 
     #[test]
@@ -508,5 +615,4 @@ mod tests {
             Some(&"testing test".to_string())
         );
     }
-
 }

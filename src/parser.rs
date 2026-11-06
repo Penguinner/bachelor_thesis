@@ -1,8 +1,12 @@
-use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
+use crate::{
+    AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE,
+    PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE,
+    REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE,
+};
 use csv::WriterBuilder;
+use quick_xml::Reader;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
-use quick_xml::Reader;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -31,13 +35,12 @@ pub struct Parser {
 }
 
 impl Parser {
-
     /// Create a new Parser for a file.
     pub fn new(file: &str) -> Parser {
         let file = File::open(file).unwrap();
         let mut reader = Reader::from_reader(BufReader::new(file));
         reader.config_mut().trim_text(true);
-        Parser { 
+        Parser {
             reader,
             next_venue_id: 0,
             next_publisher_id: 0,
@@ -55,7 +58,7 @@ impl Parser {
             publications: vec![],
         }
     }
-    
+
     // Start the parser
     pub fn run(&mut self) {
         let mut buf = Vec::new();
@@ -64,7 +67,9 @@ impl Parser {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) if matches!(e.name().as_ref(), b"dblp") => {} // Skip if the tag is dblp
                 Ok(Event::Start(e)) if Parser::is_person(&e) => self.read_person(&e).unwrap(),
-                Ok(Event::Start(e)) if Parser::is_publication(e.name().as_ref()) => self.read_publication(&e).unwrap(),
+                Ok(Event::Start(e)) if Parser::is_publication(e.name().as_ref()) => {
+                    self.read_publication(&e).unwrap()
+                }
                 Ok(Event::Eof) => break,
                 Err(e) => panic!(
                     "Error at position {}: {:?}",
@@ -102,7 +107,7 @@ impl Parser {
         let tag = e.name();
         if let Some(attr) = e.try_get_attribute("key").unwrap() {
             let key = attr.value.as_ref();
-            return matches!(tag.as_ref(), b"www") && key.starts_with(b"homepages/")
+            return matches!(tag.as_ref(), b"www") && key.starts_with(b"homepages/");
         }
         false
     }
@@ -163,25 +168,24 @@ impl Parser {
                         publication.pages = Some(self.read_text(&e)?);
                     }
                     b"note" => {
-                        let attr = e
-                            .try_get_attribute("type");
-                        if let Some(attr) = attr.unwrap() { 
+                        let attr = e.try_get_attribute("type");
+                        if let Some(attr) = attr.unwrap() {
                             let value = attr.decode_and_unescape_value(self.reader.decoder())?;
                             match value.as_ref() {
-                                "isbn" => { // Notes with type isbn are saved as isbn
+                                "isbn" => {
+                                    // Notes with type isbn are saved as isbn
                                     publication.isbn = Some(self.read_text(&e)?);
                                 }
                                 _ => publication // Notes with other type are saved as resources
                                     .resources
                                     .push((String::from(value), self.read_text(&e)?)),
                             }
-                        }
-                        else { // Type less notes are saved as notes
+                        } else {
+                            // Type less notes are saved as notes
                             publication
                                 .resources
                                 .push((String::from("note"), self.read_text(&e)?));
                         }
-                        
                     }
                     b"number" => {
                         publication.number = Some(self.read_text(&e)?);
@@ -211,18 +215,23 @@ impl Parser {
                     b"isbn" => {
                         publication.isbn = Some(self.read_text(&e)?);
                     }
-                    b"cite" | b"crossref"=> {
+                    b"cite" | b"crossref" => {
                         let text = self.read_text(&e)?;
-                        if !text.contains("homepages/") && re_pubkey.is_match(&text) { // Filter out homepage references and not proper refrences
-                            let reference = (String::from_utf8_lossy(e.name().as_ref()).into_owned(), text);
-                            if ! publication.references.contains(&reference) {
+                        if !text.contains("homepages/") && re_pubkey.is_match(&text) {
+                            // Filter out homepage references and not proper refrences
+                            let reference = (
+                                String::from_utf8_lossy(e.name().as_ref()).into_owned(),
+                                text,
+                            );
+                            if !publication.references.contains(&reference) {
                                 publication.references.push(reference);
                             }
                         }
                     }
-                    b"url" | b"ee" | b"series" | b"stream"=> publication
-                        .resources
-                        .push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), self.read_text(&e)?)),
+                    b"url" | b"ee" | b"series" | b"stream" => publication.resources.push((
+                        String::from_utf8_lossy(e.name().as_ref()).into_owned(),
+                        self.read_text(&e)?,
+                    )),
                     _ => {
                         self.reader
                             .read_to_end_into(e.to_end().name(), &mut Vec::new())
@@ -241,9 +250,9 @@ impl Parser {
         } else {
             self.publications.push(publication);
         }
-       Ok(())
+        Ok(())
     }
-    
+
     /// Write publication to csv file
     fn write_publications(&mut self) {
         for publication in self.publications.iter_mut() {
@@ -266,23 +275,41 @@ impl Parser {
             };
             if venue_name.is_some()
                 && venue_type.is_some()
-                && !self.venue_map.contains_key(&(venue_name.clone().unwrap(), venue_type.clone().unwrap())) {
-                self.venue_map.insert((venue_name.clone().unwrap(), venue_type.clone().unwrap()), self.next_venue_id);
-                self.writer.write_venue((self.next_venue_id, venue_name.clone(), venue_type.clone()));
+                && !self
+                    .venue_map
+                    .contains_key(&(venue_name.clone().unwrap(), venue_type.clone().unwrap()))
+            {
+                self.venue_map.insert(
+                    (venue_name.clone().unwrap(), venue_type.clone().unwrap()),
+                    self.next_venue_id,
+                );
+                self.writer.write_venue((
+                    self.next_venue_id,
+                    venue_name.clone(),
+                    venue_type.clone(),
+                ));
                 self.next_venue_id += 1
             }
             // Publisher
             if publication.publisher.is_some()
-                && !self.publisher_map.contains_key(&publication.publisher.clone().unwrap()) {
-                self.publisher_map.insert(publication.publisher.clone().unwrap(), self.next_publisher_id);
-                self.writer.write_publisher((self.next_publisher_id, publication.publisher.clone()));
+                && !self
+                    .publisher_map
+                    .contains_key(&publication.publisher.clone().unwrap())
+            {
+                self.publisher_map.insert(
+                    publication.publisher.clone().unwrap(),
+                    self.next_publisher_id,
+                );
+                self.writer
+                    .write_publisher((self.next_publisher_id, publication.publisher.clone()));
                 self.next_publisher_id += 1;
             }
             // Editors
             for editor in publication.editor.iter() {
                 if !self.editor_map.contains_key(editor) {
                     self.editor_map.insert(editor.clone(), self.next_editor_id);
-                    self.writer.write_editor((self.next_editor_id, editor.clone()));
+                    self.writer
+                        .write_editor((self.next_editor_id, editor.clone()));
                     self.next_editor_id += 1;
                 }
                 self.writer.write_publication_editor((
@@ -303,137 +330,177 @@ impl Parser {
                 publication.pages.clone(),
                 publication.volume.clone(),
                 publication.number.clone(),
-                self.venue_map.get(&(venue_name.clone().unwrap_or_else(String::new), venue_type.clone().unwrap_or_else(String::new))).copied(),
-                self.publisher_map.get(&publication.publisher.clone().unwrap_or_else(String::new)).copied(),
+                self.venue_map
+                    .get(&(
+                        venue_name.clone().unwrap_or_else(String::new),
+                        venue_type.clone().unwrap_or_else(String::new),
+                    ))
+                    .copied(),
+                self.publisher_map
+                    .get(&publication.publisher.clone().unwrap_or_else(String::new))
+                    .copied(),
             ));
             // Resources
             for resource in publication.resources.iter() {
-                self.writer.write_resource((self.next_resource_id, resource.0.clone(), resource.1.clone(), publication.key.clone()));
+                self.writer.write_resource((
+                    self.next_resource_id,
+                    resource.0.clone(),
+                    resource.1.clone(),
+                    publication.key.clone(),
+                ));
                 self.next_resource_id += 1;
             }
             // References
             for reference in publication.references.iter() {
-                self.writer.write_reference((reference.0.clone(), publication.key.clone(), reference.1.clone()));
+                self.writer.write_reference((
+                    reference.0.clone(),
+                    publication.key.clone(),
+                    reference.1.clone(),
+                ));
             }
             // Authors
             let mut auth_ids_present: Vec<usize> = Vec::new();
             for author in publication.authors.iter() {
-                if !self.author_map.contains_key(&(author.name.clone(), author.id)) {
-                    println!("{:?}",  author);
-                    continue
+                if !self
+                    .author_map
+                    .contains_key(&(author.name.clone(), author.id))
+                {
+                    println!("{:?}", author);
+                    continue;
                 }
-                let auth_id =  self.author_map.get(&(author.name.clone(), author.id)).unwrap();
-                if auth_ids_present.contains(&auth_id) { // Filter out duplicate Author
-                    continue
+                let auth_id = self
+                    .author_map
+                    .get(&(author.name.clone(), author.id))
+                    .unwrap();
+                if auth_ids_present.contains(&auth_id) {
+                    // Filter out duplicate Author
+                    continue;
                 }
                 self.writer.write_publication_author((
                     publication.key.clone(),
-                    self.author_map.get(&(author.name.clone(), author.id)).unwrap().clone(),
+                    self.author_map
+                        .get(&(author.name.clone(), author.id))
+                        .unwrap()
+                        .clone(),
                 ));
                 auth_ids_present.push(auth_id.clone());
+            }
         }
     }
-}
 
-/// Read the current person xml tag until finished
-fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
-    let mut buf = Vec::new();
-    let mut person = Person::new();
-    // Get Modification Date
-    person.mdate = String::from(
-        eve.try_get_attribute("mdate")
-            .unwrap()
-            .unwrap()
-            .decode_and_unescape_value(self.reader.decoder())?,
+    /// Read the current person xml tag until finished
+    fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
+        let mut buf = Vec::new();
+        let mut person = Person::new();
+        // Get Modification Date
+        person.mdate = String::from(
+            eve.try_get_attribute("mdate")
+                .unwrap()
+                .unwrap()
+                .decode_and_unescape_value(self.reader.decoder())?,
         );
-    loop { // Iterate until tag closes
-        match self.reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => match e.name().as_ref() {
-                // Add names and aliases
-                b"author" => {
-                    let author = self.read_text(&e)?;
-                    if person.name == String::new() {
-                        person.add_name(author.as_str());
-                    } else {
-                        person.alias.push(read_person_name(&author));
+        loop {
+            // Iterate until tag closes
+            match self.reader.read_event_into(&mut buf) {
+                Ok(Event::Start(e)) => match e.name().as_ref() {
+                    // Add names and aliases
+                    b"author" => {
+                        let author = self.read_text(&e)?;
+                        if person.name == String::new() {
+                            person.add_name(author.as_str());
+                        } else {
+                            person.alias.push(read_person_name(&author));
+                        }
                     }
-                }
-                b"note" => { // Affiliations
-                    let attr = e
-                        .try_get_attribute("type")
-                        .unwrap()
-                        .unwrap_or(Attribute::from(("type", "ERROR")))
-                        .decode_and_unescape_value(self.reader.decoder())?;
-                    if attr == "affiliation" {
-                        let state = String::from(
-                            e.try_get_attribute("label")
-                                .unwrap()
-                                .unwrap_or(Attribute::from(("label", "current")))
-                                .decode_and_unescape_value(self.reader.decoder())?,
-                        );
-                        person.affiliations.push((String::from(attr), state));
+                    b"note" => {
+                        // Affiliations
+                        let attr = e
+                            .try_get_attribute("type")
+                            .unwrap()
+                            .unwrap_or(Attribute::from(("type", "ERROR")))
+                            .decode_and_unescape_value(self.reader.decoder())?;
+                        if attr == "affiliation" {
+                            let state = String::from(
+                                e.try_get_attribute("label")
+                                    .unwrap()
+                                    .unwrap_or(Attribute::from(("label", "current")))
+                                    .decode_and_unescape_value(self.reader.decoder())?,
+                            );
+                            person.affiliations.push((String::from(attr), state));
+                        }
                     }
-                }
-                b"url" => { // Homepages
-                    let url = self.read_text(&e)?;
-                    person.urls.push(url);
-                }
-                _ => {
-                    self.reader
-                        .read_to_end_into(e.to_end().name(), &mut Vec::new())
-                        .unwrap();
-                } // Skip unknown tags
-            },
-            Ok(Event::End(e)) if e.name().as_ref() == b"www" => break, // End of Tag
-            Ok(Event::Eof) => return Err("Unexpected EOF".into()),
-            _ => (),
+                    b"url" => {
+                        // Homepages
+                        let url = self.read_text(&e)?;
+                        person.urls.push(url);
+                    }
+                    _ => {
+                        self.reader
+                            .read_to_end_into(e.to_end().name(), &mut Vec::new())
+                            .unwrap();
+                    } // Skip unknown tags
+                },
+                Ok(Event::End(e)) if e.name().as_ref() == b"www" => break, // End of Tag
+                Ok(Event::Eof) => return Err("Unexpected EOF".into()),
+                _ => (),
+            }
         }
+        // Check validity of person
+        if person.check_valid() {
+            self.write_person(person);
+        }
+        Ok(())
     }
-    // Check validity of person
-    if person.check_valid() {
-        self.write_person(person);
-    }
-    Ok(())
-}
-    
+
     /// Write person to csv file
     fn write_person(&mut self, person: Person) -> () {
-        self.author_map.insert((person.name.clone(), person.id), self.next_author_id);
+        self.author_map
+            .insert((person.name.clone(), person.id), self.next_author_id);
         // Author
         self.writer.write_author((
-            self.author_map.get(&(person.name.clone(), person.id)).unwrap().clone(),
+            self.author_map
+                .get(&(person.name.clone(), person.id))
+                .unwrap()
+                .clone(),
             person.name.clone(),
             person.id.clone(),
             person.mdate.clone(),
-            ));
+        ));
         // Websites
         for website in person.urls.iter() {
             self.writer.write_author_website((
                 self.next_author_website_id,
-                self.author_map.get(&(person.name.clone(), person.id)).unwrap().clone(),
+                self.author_map
+                    .get(&(person.name.clone(), person.id))
+                    .unwrap()
+                    .clone(),
                 website.clone(),
-                ));
+            ));
             self.next_author_website_id += 1;
         }
         // Affiliations
         for affiliation in person.affiliations.iter() {
             self.writer.write_affiliation((
                 self.next_affiliation_id,
-                self.author_map.get(&(person.name.clone(), person.id)).unwrap().clone(),
+                self.author_map
+                    .get(&(person.name.clone(), person.id))
+                    .unwrap()
+                    .clone(),
                 affiliation.0.clone(),
                 affiliation.1.clone(),
-                ));
+            ));
             self.next_affiliation_id += 1;
         }
         // Alias
         for alias in person.alias.iter() {
-            self.author_map.insert((alias.0.clone(), alias.1.clone()), self.next_author_id);
+            self.author_map
+                .insert((alias.0.clone(), alias.1.clone()), self.next_author_id);
             self.writer.write_aliases((
                 self.next_alias_id,
                 self.next_author_id,
                 alias.0.clone(),
-                alias.1.clone()
-                ));
+                alias.1.clone(),
+            ));
             self.next_alias_id += 1;
         }
         self.next_author_id += 1;
@@ -443,31 +510,54 @@ fn read_person(&mut self, eve: &BytesStart) -> Result<(), Box<dyn Error>> {
     fn read_text(&mut self, start: &BytesStart) -> Result<String, Box<dyn Error>> {
         let mut buf = Vec::new();
         let mut text = String::new();
-        loop { // Iterate until tag closes
+        loop {
+            // Iterate until tag closes
             match self.reader.read_event_into(&mut buf) {
-                Ok(Event::Text(e)) => { // Read direct Text
+                Ok(Event::Text(e)) => {
+                    // Read direct Text
                     text += e.unescape()?.into_owned().as_str();
                 }
-                Ok(Event::Start(e)) => match e.name().as_ref() { // Skip over formatting tags
-                    b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {},
-                    _ => return Err(format!("Unexpected event start {0}", String::from_utf8_lossy(e.name().as_ref())).into())
+                Ok(Event::Start(e)) => match e.name().as_ref() {
+                    // Skip over formatting tags
+                    b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {}
+                    _ => {
+                        return Err(format!(
+                            "Unexpected event start {0}",
+                            String::from_utf8_lossy(e.name().as_ref())
+                        )
+                        .into());
+                    }
                 },
                 Ok(Event::End(e)) if e.name().as_ref() == start.name().as_ref() => break, // End loop after end of tag
-                Ok(Event::End(e)) => match e.name().as_ref() { // Skip over formatting tags
-                    b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {},
-                    _ => return Err(format!("Unexpected end event {0}", String::from_utf8_lossy(e.name().as_ref())).into()),
+                Ok(Event::End(e)) => match e.name().as_ref() {
+                    // Skip over formatting tags
+                    b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {}
+                    _ => {
+                        return Err(format!(
+                            "Unexpected end event {0}",
+                            String::from_utf8_lossy(e.name().as_ref())
+                        )
+                        .into());
+                    }
                 },
                 Ok(Event::Empty(_)) => {} // Skip empty formatting tags
-                _ => return Err(format!("Unexpected event {0} {1}", self.reader.buffer_position(), self.reader.error_position()).into()),
+                _ => {
+                    return Err(format!(
+                        "Unexpected event {0} {1}",
+                        self.reader.buffer_position(),
+                        self.reader.error_position()
+                    )
+                    .into());
+                }
             }
         }
         Ok(text)
     }
-    
+
     /// Read the text of a tag as Integer
     fn read_int(&mut self, start: &BytesStart) -> Result<usize, Box<dyn Error>> {
-        let value =  self.read_text(start)?;
-        Ok(value.parse::<usize>().unwrap_or_else(|e1| { 
+        let value = self.read_text(start)?;
+        Ok(value.parse::<usize>().unwrap_or_else(|e1| {
             let name = String::from_utf8_lossy(start.name().as_ref()).into_owned();
             panic!("key: {name} value:{value} {e1}")
         }))
@@ -524,7 +614,10 @@ impl Publication {
 
     /// Check if has at least a [`Publication::pubtype`], [`Publication::key`], [`Publication::mdate`] and [`Publication::title`].
     pub fn fulfills_constraints(&self) -> bool {
-        !self.pubtype.is_empty() && !self.key.is_empty() && !self.mdate.is_empty() && !self.title.is_empty()
+        !self.pubtype.is_empty()
+            && !self.key.is_empty()
+            && !self.mdate.is_empty()
+            && !self.title.is_empty()
     }
 }
 
@@ -585,7 +678,7 @@ impl Person {
     /// Check if has at least [`Person::name`]
     fn check_valid(&self) -> bool {
         if self.name.is_empty() {
-            return false
+            return false;
         }
         true
     }
@@ -610,7 +703,21 @@ struct WriteManager {
     publishers: Vec<(usize, Option<String>)>,
     editors: Vec<(usize, String)>,
     authors: Vec<(usize, String, usize, String)>,
-    publications: Vec<(String, String, String, Option<usize>, Option<String>, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<usize>, Option<usize>)>,
+    publications: Vec<(
+        String,
+        String,
+        String,
+        Option<usize>,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<usize>,
+        Option<usize>,
+    )>,
     resources: Vec<(usize, String, String, String)>,
     publication_editors: Vec<(String, usize)>,
     references: Vec<(String, String, String)>,
@@ -621,7 +728,6 @@ struct WriteManager {
 }
 
 impl WriteManager {
-    
     /// Create new WriterManager
     pub fn new() -> WriteManager {
         // Touch all csv files and add header
@@ -629,26 +735,33 @@ impl WriteManager {
         touch_file(PUBLISHER_FILE, &["id", "name"]);
         touch_file(EDITOR_FILE, &["id", "name"]);
         touch_file(AUTHOR_FILE, &["key", "id", "name", "mdate"]);
-        touch_file(PUBLICATION_FILE,
-                   &["key",
-                       "mdate",
-                       "title",
-                       "year",
-                       "month",
-                       "type",
-                       "school",
-                       "isbn",
-                       "pages",
-                       "volume",
-                       "number",
-                       "venue_id",
-                       "publisher_id"]);
+        touch_file(
+            PUBLICATION_FILE,
+            &[
+                "key",
+                "mdate",
+                "title",
+                "year",
+                "month",
+                "type",
+                "school",
+                "isbn",
+                "pages",
+                "volume",
+                "number",
+                "venue_id",
+                "publisher_id",
+            ],
+        );
         touch_file(RESOURCES_FILE, &["id", "type", "value", "publication_key"]);
         touch_file(PUBLICATION_EDITOR_FILE, &["publication_key", "editor_id"]);
         touch_file(REFERENCE_FILE, &["type", "origin_pub", "dest_pub"]);
         touch_file(PUBLICATION_AUTHORS_FILE, &["publication_key", "author_id"]);
         touch_file(AUTHOR_WEBSITES_FILE, &["id", "author_id", "url"]);
-        touch_file(AFFILIATIONS_FILE, &["id", "author_id", "affiliation", "type"]);
+        touch_file(
+            AFFILIATIONS_FILE,
+            &["id", "author_id", "affiliation", "type"],
+        );
         touch_file(ALIAS_FILE, &["id", "author_id", "alias", "alias_id"]);
         // Initialize WriterManager with empty vectors
         WriteManager {
@@ -673,13 +786,13 @@ impl WriteManager {
         self.venues.push(tuple);
         // If list of venue exceeds 10000 write all of them to file
         if self.venues.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(VENUE_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.venues {
                 wrt.serialize(tuple).unwrap();
             }
@@ -694,13 +807,13 @@ impl WriteManager {
         self.publishers.push(tuple);
         // If list of publishers exceeds 10000 write all of them to file
         if self.publishers.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(PUBLISHER_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.publishers {
                 wrt.serialize(tuple).unwrap();
             }
@@ -715,13 +828,13 @@ impl WriteManager {
         self.editors.push(tuple);
         // If list of editors exceeds 10000 write all of them to file
         if self.editors.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(EDITOR_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.editors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -736,13 +849,13 @@ impl WriteManager {
         self.authors.push(tuple);
         // If list of authors exceeds 10000 write all of them to file
         if self.authors.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(AUTHOR_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.authors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -752,18 +865,35 @@ impl WriteManager {
     }
 
     /// Writes publication first to WriterManager and then to tsv file
-    pub fn write_publication(&mut self, tuple: (String, String, String, Option<usize>, Option<String>, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<usize>, Option<usize>)) {
+    pub fn write_publication(
+        &mut self,
+        tuple: (
+            String,
+            String,
+            String,
+            Option<usize>,
+            Option<String>,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<usize>,
+            Option<usize>,
+        ),
+    ) {
         // Add publication to list
         self.publications.push(tuple);
         // If list of authors exceeds 10000 write all of them to file
         if self.publications.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(PUBLICATION_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.publications {
                 wrt.serialize(tuple).unwrap();
             }
@@ -776,15 +906,15 @@ impl WriteManager {
     pub fn write_resource(&mut self, tuple: (usize, String, String, String)) {
         // Add resource to list
         self.resources.push(tuple);
-        // If list of resources exceeds 10000 write all of them to file 
+        // If list of resources exceeds 10000 write all of them to file
         if self.resources.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(RESOURCES_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.resources {
                 wrt.serialize(tuple).unwrap();
             }
@@ -799,13 +929,13 @@ impl WriteManager {
         self.publication_editors.push(tuple);
         // If list of publication editors exceeds 10000 write all of them to file
         if self.publication_editors.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(PUBLICATION_EDITOR_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.publication_editors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -820,13 +950,13 @@ impl WriteManager {
         self.references.push(tuple);
         // If list of refrences exceeds 10000 write all of them to file
         if self.references.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(REFERENCE_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.references {
                 wrt.serialize(tuple).unwrap();
             }
@@ -841,13 +971,13 @@ impl WriteManager {
         self.publication_authors.push(tuple);
         // If list of publication authors exceeds 10000 write all of them to file
         if self.publication_authors.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(PUBLICATION_AUTHORS_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.publication_authors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -862,13 +992,13 @@ impl WriteManager {
         self.author_websites.push(tuple);
         // If list of author websites exceeds 10000 write all of them to file
         if self.author_websites.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(AUTHOR_WEBSITES_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.author_websites {
                 wrt.serialize(tuple).unwrap();
             }
@@ -883,13 +1013,13 @@ impl WriteManager {
         self.affiliations.push(tuple);
         // If list of affiliations exceeds 10000 write all of them to file
         if self.affiliations.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(AFFILIATIONS_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.affiliations {
                 wrt.serialize(tuple).unwrap();
             }
@@ -904,13 +1034,13 @@ impl WriteManager {
         self.aliases.push(tuple);
         // If list of aliases exceeds 10000 write them to file
         if self.aliases.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(ALIAS_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.aliases {
                 wrt.serialize(tuple).unwrap();
             }
@@ -918,18 +1048,18 @@ impl WriteManager {
             self.aliases.clear()
         }
     }
-    
+
     /// Write the remaining items contained in any list to corresponding file
     pub fn finalize(&mut self) {
         // Venues
         if self.venues.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(VENUE_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.venues {
                 wrt.serialize(tuple).unwrap();
             }
@@ -938,13 +1068,13 @@ impl WriteManager {
         }
         // Publishers
         if self.publishers.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(PUBLISHER_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.publishers {
                 wrt.serialize(tuple).unwrap();
             }
@@ -953,13 +1083,13 @@ impl WriteManager {
         }
         // Editors
         if self.editors.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(EDITOR_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.editors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -968,13 +1098,13 @@ impl WriteManager {
         }
         // Affiliations
         if self.affiliations.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(AFFILIATIONS_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.affiliations {
                 wrt.serialize(tuple).unwrap();
             }
@@ -983,13 +1113,13 @@ impl WriteManager {
         }
         // Authors
         if self.authors.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(AUTHOR_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.authors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -998,13 +1128,13 @@ impl WriteManager {
         }
         // Publications
         if self.publications.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(PUBLICATION_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.publications {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1013,13 +1143,13 @@ impl WriteManager {
         }
         // Resources
         if self.resources.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(RESOURCES_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.resources {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1028,13 +1158,13 @@ impl WriteManager {
         }
         // Publication Editors
         if self.publication_editors.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(PUBLICATION_EDITOR_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.publication_editors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1043,13 +1173,13 @@ impl WriteManager {
         }
         // References
         if self.references.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(REFERENCE_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.references {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1058,13 +1188,13 @@ impl WriteManager {
         }
         // Publication Authors
         if self.publication_authors.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(PUBLICATION_AUTHORS_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.publication_authors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1073,13 +1203,13 @@ impl WriteManager {
         }
         // Author Websites
         if self.author_websites.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(AUTHOR_WEBSITES_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.author_websites {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1088,13 +1218,13 @@ impl WriteManager {
         }
         // Aliases
         if self.aliases.len() > 0 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new()
+            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
+                OpenOptions::new()
                     .write(true)
                     .append(true)
                     .open(ALIAS_FILE)
-                    .unwrap());
+                    .unwrap(),
+            );
             for tuple in &self.aliases {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1107,10 +1237,13 @@ impl WriteManager {
 /// Touch the a new tsv with the specified header
 fn touch_file<I, T>(file: &str, record: I) -> ()
 where
-    I: IntoIterator<Item=T>,
+    I: IntoIterator<Item = T>,
     T: AsRef<[u8]>,
 {
-    let mut wrt = WriterBuilder::new().delimiter(b'\t').from_path(file).unwrap();
+    let mut wrt = WriterBuilder::new()
+        .delimiter(b'\t')
+        .from_path(file)
+        .unwrap();
     wrt.write_record(record).unwrap();
     wrt.flush().unwrap();
 }
@@ -1120,12 +1253,13 @@ where
 fn read_person_name(name: &str) -> (String, usize) {
     let re = Regex::new(r"(.*)\s+(\d+)").unwrap();
     let name = name.trim();
-    // There exists an ID 
+    // There exists an ID
     if let Some(caps) = re.captures(name) {
         let name = caps.get(1).unwrap().as_str().to_string();
         let id = caps.get(2).unwrap().as_str().parse::<usize>().unwrap();
         (name, id)
-    } else { // No ID specified
+    } else {
+        // No ID specified
         let name = name.to_string();
         (name, 0)
     }
@@ -1133,8 +1267,8 @@ fn read_person_name(name: &str) -> (String, usize) {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_eq;
     use super::*;
+    use std::assert_eq;
 
     #[test]
     fn test_read_person_no_id() {

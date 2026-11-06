@@ -1,5 +1,9 @@
-use crate::{AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE, PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE, REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE};
-use duckdb::{params, Connection, Rows, Statement};
+use crate::{
+    AFFILIATIONS_FILE, ALIAS_FILE, AUTHOR_FILE, AUTHOR_WEBSITES_FILE, EDITOR_FILE,
+    PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE,
+    REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE,
+};
+use duckdb::{Connection, Rows, Statement, params};
 use std::error::Error;
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -14,17 +18,19 @@ pub struct DuckDBConnection {
 }
 
 impl DuckDBConnection {
-
     /// Create a new [`DuckDBConnection`] from a [`Dataset`]
-    pub fn new(dataset: Dataset) -> Result<DuckDBConnection,  Box<dyn Error >> {
+    pub fn new(dataset: Dataset) -> Result<DuckDBConnection, Box<dyn Error>> {
         // Create DuckDB database at db.duckdb
-        let mut conn = DuckDBConnection { connection: Connection::open("db.duckdb").unwrap(), dataset: dataset.clone() };
+        let mut conn = DuckDBConnection {
+            connection: Connection::open("db.duckdb").unwrap(),
+            dataset: dataset.clone(),
+        };
         // Additional initialization depending on dataset
         match dataset {
             Dataset::Dblp => {
                 conn.create_tables_dblp();
                 conn.insert_dblp_data();
-            },
+            }
             Dataset::OsmPlanet => {
                 conn.load_spatial_module();
                 conn.load_osm_planet_data();
@@ -43,8 +49,12 @@ impl DuckDBConnection {
 
     /// Activates DuckDBs profiling to time queries
     fn activate_profiling(&mut self) {
-        self.connection.execute("PRAGMA enable_profiling = 'no_output'", []).unwrap();
-        self.connection.execute("PRAGMA profiling_mode = 'standard'", []).unwrap();
+        self.connection
+            .execute("PRAGMA enable_profiling = 'no_output'", [])
+            .unwrap();
+        self.connection
+            .execute("PRAGMA profiling_mode = 'standard'", [])
+            .unwrap();
     }
 
     /// Installs and loads the DuckDB spatial module to work with spatial data
@@ -110,16 +120,25 @@ impl DuckDBConnection {
         let mut stmt: Statement<'_> = self.connection.prepare(query)?;
         let response: Result<Rows<'_>, duckdb::Error> = stmt.query(params![]);
         // Get timing info from profiling
-        let profiling = self.connection.get_profiling_info().expect("profiling should be enabled");
+        let profiling = self
+            .connection
+            .get_profiling_info()
+            .expect("profiling should be enabled");
         let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
         let duration = (duration_secs * 1000.0).round() as u128;
         // Write query result info to log
         let logmsg: String;
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(_) => {
-                logmsg = format!("Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}", query, duration, stmt.column_count(), stmt.row_count());
+                logmsg = format!(
+                    "Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}",
+                    query,
+                    duration,
+                    stmt.column_count(),
+                    stmt.row_count()
+                );
                 Ok(duration)
-            },
+            }
             Err(e) => {
                 logmsg = format!("Query: {0} failed\n {e}", query);
                 Err(e.into())
@@ -135,7 +154,7 @@ impl DuckDBConnection {
 
         result
     }
-    
+
     /// Close Connection and delete the database file
     pub fn close(self) -> Result<(), Box<dyn Error>> {
         fs::remove_file("db.duckdb").unwrap();
