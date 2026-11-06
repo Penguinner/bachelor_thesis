@@ -417,7 +417,6 @@ pub struct TestResult {
     /// Index of the test executed.
     id: usize,
     failures: usize,
-    #[serde(flatten)]
     /// Vector of time results in ms.
     results: Vec<u128>,
 }
