@@ -118,7 +118,7 @@ fn main() {
         iter,
         matches.get_flag("raw"),
         matches.get_flag("aggregate"),
-        matches.get_flag("hotrun"),
+        matches.get_flag("hot"),
     );
     clean_up();
     println!("Finished Tests");
