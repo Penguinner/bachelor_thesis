@@ -7,12 +7,13 @@ use async_compression::tokio::bufread::GzipDecoder;
 use clap::{Arg, ArgAction, ArgGroup, command, value_parser};
 use csv::ReaderBuilder;
 use futures::TryStreamExt;
-use itertools::iproduct;
+use itertools::{Itertools, iproduct};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, create_dir_all, remove_dir_all};
 use std::io::Write;
+use std::println;
 use std::process::Command;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -64,46 +65,53 @@ fn main() {
     let mut datasets: Vec<Dataset> = Vec::new();
     if matches.get_flag("dblp") {
         datasets.push(Dataset::Dblp);
-        // Download and Parse dblp data for sql use
-        if dbs
-            .iter()
-            .any(|x| x.name() == "duckdb" || x.name() == "postgres")
-        {
-            let rt = Runtime::new().unwrap();
-            let handle = rt.handle();
-
-            let _ = handle
-                .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
-                .unwrap();
-            let mut parser = Parser::new("/extern/data/dblp.xml");
-            parser.run();
-            println!("Finished Parsing DBLP data");
-        }
+        
     }
     if matches.get_flag("osm-planet") {
         datasets.push(Dataset::OsmPlanet);
-        // Download osm-planet data
-        if dbs
-            .iter()
-            .any(|x| x.name() == "duckdb" || x.name() == "postgres")
-        {
-            let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
-            println!("Downloading {url}");
-            let client = reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(900))
-                .build()
-                .unwrap();
-            let response = client.get(url).send().unwrap();
-            let file_path = format!("/extern/data/planet-latest.osm.pbf");
-            let mut file = File::create(&file_path).unwrap();
-            file.write_all(&response.bytes().unwrap()).unwrap();
-        }
     }
 
     // Create cross join between datasets and databases
     let tests: Vec<Test> = iproduct!(dbs, datasets)
         .map(|(db, dataset)| Test { db, dataset })
         .collect();
+
+    println!(
+        "Tests:\n{}",
+        tests.iter()
+            .map(|t| {format!("Test {}",t.name())})
+            .join("\n")
+    );
+
+    // Download and Parse dblp data for sql use
+    if matches.get_flag("dblp") && !matches.get_flag("qlever")
+    {
+        println!("Parsing DBLP data");
+        let rt = Runtime::new().unwrap();
+        let handle = rt.handle();
+
+        let _ = handle
+            .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
+            .unwrap();
+        let mut parser = Parser::new("/extern/data/dblp.xml");
+        parser.run();
+        println!("Finished Parsing DBLP data");
+    }
+
+    // Download osm-planet data
+    if matches.get_flag("osm-planet") && !matches.get_flag("qlever")
+    {
+        let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
+        println!("Downloading {url}");
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(900))
+            .build()
+            .unwrap();
+        let response = client.get(url).send().unwrap();
+        let file_path = format!("/extern/data/planet-latest.osm.pbf");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(&response.bytes().unwrap()).unwrap();
+    }
 
     run_tests(
         tests,
