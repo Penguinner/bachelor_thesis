@@ -84,7 +84,7 @@ fn main() {
     );
 
     // Download and Parse dblp data for sql use
-    if matches.get_flag("dblp") && !matches.get_flag("qlever")
+    if matches.get_flag("dblp") && (matches.get_flag("postgres") || matches.get_flag("duckdb"))
     {
         println!("Parsing DBLP data");
         let rt = Runtime::new().unwrap();
@@ -99,7 +99,7 @@ fn main() {
     }
 
     // Download osm-planet data
-    if matches.get_flag("osm-planet") && !matches.get_flag("qlever")
+    if matches.get_flag("osm-planet") && (matches.get_flag("postgres") || matches.get_flag("duckdb"))
     {
         let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
         println!("Downloading {url}");
@@ -584,9 +584,10 @@ fn run_test(
                 let _ = connection.run_test_query(record);
             }
         }
+        println!("Finished warmup");
     }
 
-    for _ in 0..iterations {
+    for iter in 0..iterations {
         // Run Queries
         for (id, record) in queries.iter().enumerate() {
             if !hotrun {
@@ -597,9 +598,11 @@ fn run_test(
             match result {
                 Ok(time) => {
                     results[id].add_time(time);
+                    println!("Finished query {id} iteration: {iter} with {time}ms");
                 }
                 Err(_) => {
                     results[id].inc_failures();
+                    println!("Finished query {id} iteration: {iter} with failure");
                 }
             }
         }
