@@ -117,7 +117,7 @@ fn main() {
         tests,
         iter,
         matches.get_flag("raw"),
-        matches.get_flag("agg"),
+        matches.get_flag("aggregate"),
         matches.get_flag("hotrun"),
     );
     clean_up();
