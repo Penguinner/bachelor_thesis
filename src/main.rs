@@ -11,7 +11,7 @@ use itertools::{Itertools, iproduct};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{File, create_dir_all, remove_dir_all};
+use std::fs::{File, create_dir_all, exists, remove_dir_all, remove_file};
 use std::io::Write;
 use std::println;
 use std::process::Command;
@@ -65,7 +65,6 @@ fn main() {
     let mut datasets: Vec<Dataset> = Vec::new();
     if matches.get_flag("dblp") {
         datasets.push(Dataset::Dblp);
-        
     }
     if matches.get_flag("osm-planet") {
         datasets.push(Dataset::OsmPlanet);
@@ -78,40 +77,11 @@ fn main() {
 
     println!(
         "Tests:\n{}",
-        tests.iter()
-            .map(|t| {format!("Test {}",t.name())})
+        tests
+            .iter()
+            .map(|t| { format!("Test {}", t.name()) })
             .join("\n")
     );
-
-    // Download and Parse dblp data for sql use
-    if matches.get_flag("dblp") && (matches.get_flag("postgres") || matches.get_flag("duckdb"))
-    {
-        println!("Parsing DBLP data");
-        let rt = Runtime::new().unwrap();
-        let handle = rt.handle();
-
-        let _ = handle
-            .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
-            .unwrap();
-        let mut parser = Parser::new("/extern/data/dblp.xml");
-        parser.run();
-        println!("Finished Parsing DBLP data");
-    }
-
-    // Download osm-planet data
-    if matches.get_flag("osm-planet") && (matches.get_flag("postgres") || matches.get_flag("duckdb"))
-    {
-        let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
-        println!("Downloading {url}");
-        let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(900))
-            .build()
-            .unwrap();
-        let response = client.get(url).send().unwrap();
-        let file_path = format!("/extern/data/planet-latest.osm.pbf");
-        let mut file = File::create(&file_path).unwrap();
-        file.write_all(&response.bytes().unwrap()).unwrap();
-    }
 
     run_tests(
         tests,
@@ -201,9 +171,13 @@ fn setup_cli() -> clap::ArgMatches {
     matches
 }
 
-fn run_tests(tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotrun: bool) {
+fn run_tests(mut tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotrun: bool) {
     // Run Tests
-    for test in tests {
+    loop {
+        let test = match tests.pop() {
+            Some(t) => t,
+            None => break,
+        };
         clear_cache().expect("Failed to clear cache");
         let name = test.name();
         let query_file = test.dataset.get_query_file();
@@ -211,7 +185,7 @@ fn run_tests(tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotrun: 
         // Create Connection and insert Data
         let mut conn = test
             .db
-            .to_connection(test.dataset)
+            .to_connection(&test.dataset)
             .expect(format!("Failed to create connection for {}", name).as_str());
         // Run Queries
         let results: Vec<TestResult> = run_test(&query_file, iter, &mut conn, false)
@@ -224,6 +198,9 @@ fn run_tests(tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotrun: 
         // Save Results
         save_results(&name, raw, aggregate, results, hot_results);
         // Clean Up
+        if tests.iter().all(|t| t.dataset != test.dataset) {
+            test.dataset.clear_depedencies();
+        }
         conn.close()
             .expect(format!("Failed to close connection for {}", name).as_str());
         println!("End of Test: {}", name);
@@ -312,7 +289,7 @@ impl Test {
 }
 
 /// Defines a dataset via the [`name`](Dataset::name) and [`get_query_file`](Dataset::get_query_file) function.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Dataset {
     Dblp,
     OsmPlanet,
@@ -343,6 +320,49 @@ impl Dataset {
             _ => false,
         }
     }
+
+    pub fn get_sql_dependencies(&self) {
+        match self {
+            // Download and Parse dblp data for sql use
+            Dataset::Dblp if !exists("/extern/data/dblp.xml").unwrap() => {
+                println!("Parsing DBLP data");
+                let rt = Runtime::new().unwrap();
+                let handle = rt.handle();
+
+                let _ = handle
+                    .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
+                    .unwrap();
+                let mut parser = Parser::new("/extern/data/dblp.xml");
+                parser.run();
+                println!("Finished Parsing DBLP data");
+            }
+            // Download osm-planet data
+            Dataset::OsmPlanet if !exists("/extern/data/planet-latest.osm.pbf").unwrap() => {
+                let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
+                println!("Downloading {url}");
+                let client = reqwest::blocking::Client::builder()
+                    .timeout(Duration::from_secs(900))
+                    .build()
+                    .unwrap();
+                let response = client.get(url).send().unwrap();
+                let file_path = format!("/extern/data/planet-latest.osm.pbf");
+                let mut file = File::create(&file_path).unwrap();
+                file.write_all(&response.bytes().unwrap()).unwrap();
+            }
+            _ => {}
+        }
+    }
+
+    pub fn clear_depedencies(&self) {
+        match self {
+            Dataset::Dblp => {
+                let _ = remove_file("/extern/data/dblp.xml");
+            },
+            Dataset::OsmPlanet => {
+                let _ = remove_file("/extern/data/planet-latest.osm.pbf");
+            }
+        }
+    }
 }
 
 /// Defines Database via [`name`](Database::name) function.
@@ -368,7 +388,7 @@ impl Database {
 
     /// Returns corresponding [`Connection`] for dataset.
     /// May return an Error if the connection establishment fails.
-    pub fn to_connection(&self, dataset: Dataset) -> Result<Connection, Box<dyn Error>> {
+    pub fn to_connection(&self, dataset: &Dataset) -> Result<Connection, Box<dyn Error>> {
         match self {
             Database::QLever => Ok(Connection::QLever(QLeverConnection::new(dataset)?)),
             #[cfg(feature = "duckdb")]
@@ -667,7 +687,7 @@ fn write_results_aggregated(
 }
 
 fn clean_up() -> () {
-    let _ = remove_dir_all("/extern/data/");
+    let _ = remove_dir_all("/extern/data");
 }
 
 /// Downloads the xml GZIP archive for the dblp dataset.
@@ -705,8 +725,8 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Read;
     use std::fs::File;
+    use std::io::Read;
     use tempfile::TempDir;
 
     use super::*;

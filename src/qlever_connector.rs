@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, remove_dir_all};
 use std::io::Write;
 use std::process::Command;
 use std::thread::sleep;
@@ -26,13 +26,19 @@ pub struct QLeverConnection {
 
 impl QLeverConnection {
     /// Create a new [`QLeverConnection`]
-    pub fn new(dataset: Dataset) -> Result<QLeverConnection, Box<dyn Error>> {
+    pub fn new(dataset: &Dataset) -> Result<QLeverConnection, Box<dyn Error>> {
         // Read Config for dataset
         let mut qlever_file = QLeverConnection::setup_config(dataset);
         println!("Finished Setup Config");
         qlever_file.replace_internal_variables();
         // Create directory for dataset
-        fs::create_dir(format!("/extern/data/{}", qlever_file.data.get("NAME").unwrap()).as_str())?;
+        fs::create_dir(
+            format!(
+                "/extern/data/{}-qlever",
+                qlever_file.data.get("NAME").unwrap()
+            )
+            .as_str(),
+        )?;
         // Get Data for dataset with qlever file command
         QLeverConnection::get_data(&qlever_file);
         println!("Finished Fetching Data");
@@ -63,7 +69,7 @@ impl QLeverConnection {
     }
 
     /// Get the QLeverfile from the qlever-control repository and parse it for our purpose
-    fn setup_config(dataset: Dataset) -> QleverFile {
+    fn setup_config(dataset: &Dataset) -> QleverFile {
         // Fetch File
         let target = match dataset {
             Dataset::Dblp => {
@@ -85,7 +91,11 @@ impl QLeverConnection {
         command_assist(
             "bash",
             &["-c", qlever_file.data.get("GET_DATA_CMD").unwrap().as_str()],
-            format!("/extern/data/{}", qlever_file.data.get("NAME").unwrap()).as_str(),
+            format!(
+                "/extern/data/{}-qlever",
+                qlever_file.data.get("NAME").unwrap()
+            )
+            .as_str(),
         )
         .unwrap();
     }
@@ -94,7 +104,7 @@ impl QLeverConnection {
     fn index(qlever_file: &QleverFile) {
         // create settings json
         let name = qlever_file.data.get("NAME").unwrap().as_str();
-        let path = format!("/extern/data/{name}/{name}.settings.json");
+        let path = format!("/extern/data/{name}-qlever/{name}.settings.json");
         let mut file = File::create(path.clone()).unwrap();
         file.write_all(
             qlever_file
@@ -139,8 +149,8 @@ impl QLeverConnection {
             let cmd = json["cmd"].as_str().unwrap();
             if cmd.contains("gunzip") {
                 let glob_cmd = format!(
-                "/extern/data/{name}/{0}",
-                json["for-each"].as_str().unwrap()
+                    "/extern/data/{name}/{0}",
+                    json["for-each"].as_str().unwrap()
                 );
                 for file in glob(glob_cmd.as_str()).unwrap() {
                     let file_path = file.unwrap();
@@ -309,6 +319,10 @@ impl QLeverConnection {
                 .await
                 .unwrap();
         });
+        // Delete index files
+        let name = self.qlever_file.data.get("NAME").unwrap().as_str();
+        let dir = format!("~/extern/data/{name}");
+        let _ = remove_dir_all(dir);
 
         Ok(())
     }
@@ -333,7 +347,7 @@ impl QLeverConnection {
             }
         };
         let filepath: String = format!(
-            "/extern/data/qlever.{}.log",
+            "/extern/results/qlever.{}.log",
             self.qlever_file.data.get("NAME").unwrap()
         );
         let mut file = OpenOptions::new()

@@ -28,7 +28,9 @@ pub struct PostgresConnection {
 }
 
 impl PostgresConnection {
-    pub fn new(dataset: Dataset) -> Result<Self, Box<dyn Error>> {
+    pub fn new(dataset: &Dataset) -> Result<Self, Box<dyn Error>> {
+        // Get dependencies
+        dataset.get_sql_dependencies();
         // Startup Docker container
         let rt = Runtime::new()?;
         let handle = rt.handle();
@@ -225,7 +227,10 @@ impl PostgresConnection {
             .write(true)
             .create(true)
             .append(true)
-            .open(format!("/extern/data/postgres.{}.log", self.dataset.name()))
+            .open(format!(
+                "/extern/results/postgres.{}.log",
+                self.dataset.name()
+            ))
             .unwrap();
 
         let logmsg: String;

@@ -19,7 +19,8 @@ pub struct DuckDBConnection {
 
 impl DuckDBConnection {
     /// Create a new [`DuckDBConnection`] from a [`Dataset`]
-    pub fn new(dataset: Dataset) -> Result<DuckDBConnection, Box<dyn Error>> {
+    pub fn new(dataset: &Dataset) -> Result<DuckDBConnection, Box<dyn Error>> {
+        dataset.get_sql_dependencies();
         // Create DuckDB database at db.duckdb
         let mut conn = DuckDBConnection {
             connection: Connection::open("db.duckdb").unwrap(),
@@ -148,7 +149,10 @@ impl DuckDBConnection {
             .write(true)
             .create(true)
             .append(true)
-            .open(format!("/extern/data/duckdb.{}.log", self.dataset.name()))
+            .open(format!(
+                "/extern/results/duckdb.{}.log",
+                self.dataset.name()
+            ))
             .unwrap();
         let _ = file.write(logmsg.as_bytes());
 
