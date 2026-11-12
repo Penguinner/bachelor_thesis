@@ -44,6 +44,9 @@ const AFFILIATIONS_FILE: &str = "/extern/data/affiliations.tsv";
 const ALIAS_FILE: &str = "/extern/data/aliases.tsv";
 
 fn main() {
+    // Create directory for storing temporary data
+    let _ = create_dir_all("/extern/data");
+    let _ = create_dir_all("/extern/results");
     // Logging setup
     Ftail::new()
         .single_file(
@@ -70,9 +73,6 @@ fn main() {
     if matches.get_flag("duckdb") {
         dbs.push(Database::DuckDB);
     }
-
-    // Create directory for storing temporary data
-    let _ = create_dir_all("/extern/data");
 
     let mut datasets: Vec<Dataset> = Vec::new();
     if matches.get_flag("dblp") {
