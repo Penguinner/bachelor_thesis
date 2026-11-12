@@ -782,7 +782,7 @@ impl WriteManager {
         if self.venues.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).open(VENUE_FILE).unwrap());
+                .from_writer(OpenOptions::new().append(true).create(true).open(VENUE_FILE).unwrap());
             for v in &self.venues {
                 wrt.serialize(v).unwrap();
             }
@@ -800,6 +800,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(PUBLISHER_FILE)
                     .unwrap(),
             );
@@ -819,7 +820,7 @@ impl WriteManager {
         if self.editors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).open(EDITOR_FILE).unwrap());
+                .from_writer(OpenOptions::new().append(true).create(true).open(EDITOR_FILE).unwrap());
             for e in &self.editors {
                 wrt.serialize(e).unwrap();
             }
@@ -836,7 +837,7 @@ impl WriteManager {
         if self.authors.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).open(AUTHOR_FILE).unwrap());
+                .from_writer(OpenOptions::new().append(true).create(true).open(AUTHOR_FILE).unwrap());
             for a in &self.authors {
                 wrt.serialize(a).unwrap();
             }
@@ -854,6 +855,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(PUBLICATION_FILE)
                     .unwrap(),
             );
@@ -874,6 +876,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(RESOURCES_FILE)
                     .unwrap(),
             );
@@ -894,6 +897,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(PUBLICATION_EDITOR_FILE)
                     .unwrap(),
             );
@@ -914,6 +918,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(REFERENCE_FILE)
                     .unwrap(),
             );
@@ -934,6 +939,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(PUBLICATION_AUTHORS_FILE)
                     .unwrap(),
             );
@@ -954,6 +960,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(AUTHOR_WEBSITES_FILE)
                     .unwrap(),
             );
@@ -974,6 +981,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(AFFILIATIONS_FILE)
                     .unwrap(),
             );
@@ -993,7 +1001,7 @@ impl WriteManager {
         if self.aliases.len() == 10000 {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).open(ALIAS_FILE).unwrap());
+                .from_writer(OpenOptions::new().append(true).create(true).open(ALIAS_FILE).unwrap());
             for a in &self.aliases {
                 wrt.serialize(a).unwrap();
             }
@@ -1008,7 +1016,7 @@ impl WriteManager {
         if !self.venues.is_empty() {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).open(VENUE_FILE).unwrap());
+                .from_writer(OpenOptions::new().append(true).create(true).open(VENUE_FILE).unwrap());
             for venue in &self.venues {
                 wrt.serialize(venue).unwrap();
             }
@@ -1020,6 +1028,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(PUBLISHER_FILE)
                     .unwrap(),
             );
@@ -1033,7 +1042,7 @@ impl WriteManager {
         if !self.editors.is_empty() {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).open(EDITOR_FILE).unwrap());
+                .from_writer(OpenOptions::new().append(true).create(true).open(EDITOR_FILE).unwrap());
             for tuple in &self.editors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1045,6 +1054,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(AFFILIATIONS_FILE)
                     .unwrap(),
             );
@@ -1058,7 +1068,7 @@ impl WriteManager {
         if !self.authors.is_empty() {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).open(AUTHOR_FILE).unwrap());
+                .from_writer(OpenOptions::new().append(true).create(true).open(AUTHOR_FILE).unwrap());
             for tuple in &self.authors {
                 wrt.serialize(tuple).unwrap();
             }
@@ -1070,6 +1080,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(PUBLICATION_FILE)
                     .unwrap(),
             );
@@ -1084,6 +1095,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(RESOURCES_FILE)
                     .unwrap(),
             );
@@ -1098,6 +1110,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(PUBLICATION_EDITOR_FILE)
                     .unwrap(),
             );
@@ -1112,6 +1125,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(REFERENCE_FILE)
                     .unwrap(),
             );
@@ -1126,6 +1140,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(PUBLICATION_AUTHORS_FILE)
                     .unwrap(),
             );
@@ -1140,6 +1155,7 @@ impl WriteManager {
             let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
                 OpenOptions::new()
                     .append(true)
+                    .create(true)
                     .open(AUTHOR_WEBSITES_FILE)
                     .unwrap(),
             );
@@ -1153,7 +1169,7 @@ impl WriteManager {
         if !self.aliases.is_empty() {
             let mut wrt = WriterBuilder::new()
                 .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).open(ALIAS_FILE).unwrap());
+                .from_writer(OpenOptions::new().append(true).create(true).open(ALIAS_FILE).unwrap());
             for tuple in &self.aliases {
                 wrt.serialize(tuple).unwrap();
             }
