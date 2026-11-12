@@ -320,10 +320,12 @@ dependencies = [
  "clap",
  "csv",
  "duckdb",
+ "ftail",
  "futures",
  "glob",
  "injectorpp",
  "itertools",
+ "log",
  "postgres",
  "quick-xml",
  "regex",
@@ -483,8 +485,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -881,6 +885,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "ftail"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e83da81a8199b107be634ea9deaf0de182b152c9681bd8986791e04544ac5aa0"
+dependencies = [
+ "chrono",
+ "log",
 ]
 
 [[package]]

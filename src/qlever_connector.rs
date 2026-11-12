@@ -2,18 +2,19 @@ use bollard::Docker;
 use bollard::query_parameters::{PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions};
 use core::panic;
 use glob::glob;
+use log::{error, info, trace};
 use regex::{Captures, Regex};
 use reqwest::header;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{File, OpenOptions, remove_dir_all};
+use std::fs;
+use std::fs::{File, remove_dir_all};
 use std::io::Write;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use std::{eprintln, fs};
 use tokio::runtime::Runtime;
 
 use crate::Dataset;
@@ -29,7 +30,7 @@ impl QLeverConnection {
     pub fn new(dataset: &Dataset) -> Result<QLeverConnection, Box<dyn Error>> {
         // Read Config for dataset
         let mut qlever_file = QLeverConnection::setup_config(dataset);
-        println!("Finished Setup Config");
+        trace!("Finished Setup Config");
         qlever_file.replace_internal_variables();
         // Create directory for dataset
         fs::create_dir(
@@ -41,17 +42,17 @@ impl QLeverConnection {
         )?;
         // Get Data for dataset with qlever file command
         QLeverConnection::get_data(&qlever_file);
-        println!("Finished Fetching Data");
+        trace!("Finished Fetching Data");
         // Start Indexing
         QLeverConnection::index(&qlever_file);
-        println!("Finished Indexing");
+        trace!("Finished Indexing");
         let conn = QLeverConnection::start(&qlever_file);
-        println!("Finished startup");
+        trace!("Finished startup");
         Ok(conn)
     }
 
     /// Cooldown by using the clear-cache-complete command for qlever
-    pub fn cooldown(&mut self) -> () {
+    pub fn cooldown(&mut self) {
         let port = self.qlever_file.server.get("PORT").unwrap().as_str();
         let client = reqwest::blocking::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -83,7 +84,7 @@ impl QLeverConnection {
         let content = response.text().unwrap();
         // Convert to QLeverfile struct
         let sanitized = sanitize_toml(content);
-        return toml::from_str::<QleverFile>(sanitized.as_str()).unwrap();
+        toml::from_str::<QleverFile>(sanitized.as_str()).unwrap()
     }
 
     /// Get Data for dataset defined by GET_DATA_CMD in QLeverfile
@@ -145,7 +146,7 @@ impl QLeverConnection {
             .as_str();
             let multi_json = qlever_file.index.get("MULTI_INPUT_JSON").unwrap().as_str();
             let json: Value =
-                serde_json::from_str(&multi_json.replace("\'", "\"").as_str()).unwrap();
+                serde_json::from_str(multi_json.replace("\'", "\"").as_str()).unwrap();
             let cmd = json["cmd"].as_str().unwrap();
             if cmd.contains("gunzip") {
                 let glob_cmd = format!(
@@ -159,7 +160,7 @@ impl QLeverConnection {
                     command += format!(" -f <({gunzip_cmd}) -g - -F ttl -p false").as_str();
                 }
             } else if cmd.contains("lbzcat") {
-                command += format!(" -f {{cmd}}").as_str();
+                command += format!(" -f {}", cmd).as_str();
             } else {
                 panic!("Unknown cmd for getting qlever data {cmd}");
             }
@@ -192,6 +193,7 @@ impl QLeverConnection {
         }
 
         command += format!(" | tee /index/{name}.index-log.txt'").as_str();
+        info!("Running index command: {command}");
         // Execute Index command
         command_assist("bash", &["-c", command.as_str()], ".").unwrap()
     }
@@ -237,6 +239,7 @@ impl QLeverConnection {
         }
         command += format!(" -s 600s -a benchmark > /index/{name}.server-log.txt 2>&1'").as_str();
         // Execute Start Command
+        info!("Running start command: {command}");
         command_assist("bash", &["-c", command.as_str()], ".").unwrap();
         let mut conn = QLeverConnection {
             qlever_file: qlever_file.clone(),
@@ -263,10 +266,10 @@ impl QLeverConnection {
             let result = self.do_query_request("SELECT * WHERE {?s ?p ?o} LIMIT 1");
             match result {
                 Ok(_) => {
-                    return ();
+                    return
                 }
                 Err(e) => {
-                    eprintln!("Failure during HTTP request: {:?}", e);
+                    error!("Failure during HTTP request: {:?}", e);
                 }
             }
 
@@ -274,7 +277,7 @@ impl QLeverConnection {
             let backoff_ms = std::cmp::min(200u64 << (attempts - 1).min(4), 3000);
             let sleep_for = Duration::from_millis(backoff_ms.min(remaining.as_millis() as u64));
 
-            eprintln!(
+            info!(
                 "[ waiting for qlever ] attempt {attempts}, \
                 elapsed={:?}, retrying in {:?}",
                 start.elapsed(),
@@ -287,6 +290,7 @@ impl QLeverConnection {
     /// Stop the QLever docker container
     pub fn stop(&self) -> Result<(), Box<dyn Error>> {
         //Stop docker container
+        trace!("Stopping qlever docker container");
         let rt = Runtime::new().unwrap();
         let handle = rt.handle();
 
@@ -332,31 +336,18 @@ impl QLeverConnection {
         // Run query
         let response = self.do_query_request(query);
         // Write results to log
-        let logmsg: String;
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok((time, rows, columns)) => {
-                logmsg = format!(
-                    "Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}",
-                    query, time, columns, rows
+                info!(
+                    "Query: {query}\n Duration: {time} Result Size: Columns {columns} Rows {rows}"
                 );
                 Ok(time)
             }
             Err(e) => {
-                logmsg = format!("Query: {0} failed\n{1}", query, e);
+                error!("Query: {query} failed\n{e}");
                 Err(e)
             }
         };
-        let filepath: String = format!(
-            "/extern/results/qlever.{}.log",
-            self.qlever_file.data.get("NAME").unwrap()
-        );
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .append(true)
-            .open(filepath)
-            .unwrap();
-        let _ = file.write(logmsg.as_bytes());
 
         result
     }
@@ -426,6 +417,7 @@ pub struct QleverFile {
 impl QleverFile {
     /// Replaces variables inside the QLeverfile with the corresponding value
     pub fn replace_internal_variables(&mut self) {
+        trace!("Replacing internal variables in QLeverFile");
         let regex = Regex::new(r"\$\{(?<prefix>\w+:)?(?<key>\w+)}").unwrap();
         // Iterate over Data
         self.data = self
@@ -551,17 +543,19 @@ fn command_assist(
         .args(args)
         .current_dir(current_dir)
         .output()
-        .expect(
-            ("Failed executing command ".to_string() + command_str + " " + args.join(" ").as_str())
-                .as_ref(),
+        .unwrap_or_else(|e| {
+            let error = "Failed executing command ".to_string() + command_str + " " + args.join(" ").as_str();
+            error!("{error}:{e}");
+            panic!("{error}")
+        }
         );
-    println!(
+    info!(
         "executed_command: {}",
         command_str.to_string() + " " + args.join(" ").as_str()
     );
-    println!("status: {}", &command.status);
-    println!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
-    println!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
+    info!("status: {}", &command.status);
+    info!("stdout:\n{}", String::from_utf8_lossy(&command.stdout));
+    info!("stderr:\n{}", String::from_utf8_lossy(&command.stderr));
     if command.status.success() {
         Ok(())
     } else {
