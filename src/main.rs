@@ -6,16 +6,19 @@ use crate::qlever_connector::QLeverConnection;
 use async_compression::tokio::bufread::GzipDecoder;
 use clap::{Arg, ArgAction, ArgGroup, command, value_parser};
 use csv::ReaderBuilder;
+use ftail::Ftail;
 use futures::TryStreamExt;
 use itertools::{Itertools, iproduct};
+use log::{error, info, trace, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, create_dir_all, exists, remove_dir_all, remove_file};
 use std::io::Write;
-use std::println;
+use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
+use std::{matches, panic, vec};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
@@ -41,6 +44,15 @@ const AFFILIATIONS_FILE: &str = "/extern/data/affiliations.tsv";
 const ALIAS_FILE: &str = "/extern/data/aliases.tsv";
 
 fn main() {
+    // Logging setup
+    Ftail::new()
+        .single_file(
+            Path::new("/extern/results/benchmark.log"),
+            true,
+            log::LevelFilter::Trace,
+        )
+        .init()
+        .unwrap();
     // CLI Setup
     let matches = setup_cli();
 
@@ -75,7 +87,7 @@ fn main() {
         .map(|(db, dataset)| Test { db, dataset })
         .collect();
 
-    println!(
+    info!(
         "Tests:\n{}",
         tests
             .iter()
@@ -91,11 +103,11 @@ fn main() {
         matches.get_flag("hot"),
     );
     clean_up();
-    println!("Finished Tests");
+    trace!("Finished Tests");
 }
 
 fn setup_cli() -> clap::ArgMatches {
-    let matches = command!()
+    command!()
         .arg(
             Arg::new("dblp")
                 .long("dblp")
@@ -167,33 +179,43 @@ fn setup_cli() -> clap::ArgMatches {
                 .args(["dblp", "osm-planet"])
                 .multiple(true),
         )
-        .get_matches();
-    matches
+        .get_matches()
 }
 
 fn run_tests(mut tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotrun: bool) {
     // Run Tests
-    loop {
-        let test = match tests.pop() {
-            Some(t) => t,
-            None => break,
-        };
-        clear_cache().expect("Failed to clear cache");
+    while let Some(t) = tests.pop() {
+        let test = t;
+        clear_cache().unwrap();
         let name = test.name();
         let query_file = test.dataset.get_query_file();
-        println!("Start of Test: {}", name);
+        trace!("Start of Test: {name}");
         // Create Connection and insert Data
-        let mut conn = test
-            .db
-            .to_connection(&test.dataset)
-            .expect(format!("Failed to create connection for {}", name).as_str());
+        let mut conn = test.db.to_connection(&test.dataset).unwrap_or_else(|e| {
+            error!("{e}");
+            panic!("Failed to create connection for {name}");
+        });
         // Run Queries
-        let results: Vec<TestResult> = run_test(&query_file, iter, &mut conn, false)
-            .expect(format!("Failed while testing coldrun for {}", name).as_str());
+        trace!("Start cold run of Test: {name}");
+        let results: Vec<TestResult> = match run_test(&query_file, iter, &mut conn, false) {
+            Ok(i) => i,
+            Err(e) => {
+                error!("Failed while testing coldrun for {name}\n {e}");
+                vec![]
+            }
+        };
+        trace!("End cold run of Test: {name}");
         let mut hot_results: Vec<TestResult> = Vec::new();
         if hotrun {
-            hot_results = run_test(&query_file, iter, &mut conn, true)
-                .expect(format!("Failed while testing hotrun for {}", name).as_str());
+            trace!("Start hot run of Test: {name}");
+            hot_results = match run_test(&query_file, iter, &mut conn, true) {
+                Ok(i) => i,
+                Err(e) => {
+                    error!("Failed while testing hotrun for {name}\n {e}");
+                    vec![]
+                }
+            };
+            trace!("End hot run of Test: {name}");
         }
         // Save Results
         save_results(&name, raw, aggregate, results, hot_results);
@@ -201,9 +223,11 @@ fn run_tests(mut tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotr
         if tests.iter().all(|t| t.dataset != test.dataset) {
             test.dataset.clear_depedencies();
         }
-        conn.close()
-            .expect(format!("Failed to close connection for {}", name).as_str());
-        println!("End of Test: {}", name);
+        conn.close().unwrap_or_else(|e| {
+            error!("{e}");
+            panic!("Failed to close connection for {name}");
+        });
+        trace!("End of Test: {}", name);
     }
 }
 
@@ -218,58 +242,46 @@ fn save_results(
     let _ = create_dir_all("/extern/results");
     // Write raw results to a tsv file
     if raw {
+        trace!("Write cold raw results");
         write_results(
             &results,
             File::create(format!("/extern/results/{}-cold.raw.tsv", name)).unwrap(),
         )
-        .expect(
-            format!(
-                "Failed while writing raw results of cold run {} to file",
-                name
-            )
-            .as_str(),
-        );
+        .unwrap_or_else(|e| {
+            error!("Failed while writing raw results of cold run {name} to file. {e}");
+        });
 
         if !hot_results.is_empty() {
+            trace!("Write hot raw results");
             write_results(
                 &hot_results,
                 File::create(format!("/extern/results/{}-hot.raw.tsv", name)).unwrap(),
             )
-            .expect(
-                format!(
-                    "Failed while writing raw results of hot run {} to file",
-                    name
-                )
-                .as_str(),
-            );
+            .unwrap_or_else(|e| {
+                error!("Failed while writing raw results of hot run {name} to file. {e}");
+            });
         }
     }
     // Write aggregated results to a tsv file
     if aggregate {
+        trace!("Write cold aggregated results");
         write_results_aggregated(
             &results,
             File::create(format!("/extern/results/{}-cold.aggregate.tsv", name)).unwrap(),
         )
-        .expect(
-            format!(
-                "Failed while writing aggregate results of cold run {} to file",
-                name
-            )
-            .as_str(),
-        );
+        .unwrap_or_else(|e| {
+            error!("Failed while writing aggregate results of cold run {name} to file. {e}");
+        });
 
         if !hot_results.is_empty() {
+            trace!("Write hot aggregate results");
             write_results_aggregated(
                 &hot_results,
                 File::create(format!("/extern/results/{}-hot.aggregate.tsv", name)).unwrap(),
             )
-            .expect(
-                format!(
-                    "Failed while writing aggregate results of hot run {} to file",
-                    name
-                )
-                .as_str(),
-            );
+            .unwrap_or_else(|e| {
+                error!("Failed while writing aggregate results of cold run {name} to file. {e}");
+            });
         }
     }
 }
@@ -315,38 +327,35 @@ impl Dataset {
     /// Returns bool if the Dataset is spatial.
     /// Needed by PostgreSQL and DuckDB for loading spatial modules on start.
     pub fn is_geo(&self) -> bool {
-        match self {
-            Dataset::OsmPlanet => true,
-            _ => false,
-        }
+        matches!(self, Self::OsmPlanet)
     }
 
+    /// Download and process the needed data for sql engines
     pub fn get_sql_dependencies(&self) {
         match self {
             // Download and Parse dblp data for sql use
             Dataset::Dblp if !exists("/extern/data/dblp.xml").unwrap() => {
-                println!("Parsing DBLP data");
+                trace!("Parsing DBLP data");
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
 
-                let _ = handle
+                handle
                     .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
                     .unwrap();
                 let mut parser = Parser::new("/extern/data/dblp.xml");
                 parser.run();
-                println!("Finished Parsing DBLP data");
+                trace!("Finished Parsing DBLP data");
             }
             // Download osm-planet data
             Dataset::OsmPlanet if !exists("/extern/data/planet-latest.osm.pbf").unwrap() => {
                 let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
-                println!("Downloading {url}");
+                trace!("Downloading OSM data {url}");
                 let client = reqwest::blocking::Client::builder()
                     .timeout(Duration::from_secs(900))
                     .build()
                     .unwrap();
                 let response = client.get(url).send().unwrap();
-                let file_path = format!("/extern/data/planet-latest.osm.pbf");
-                let mut file = File::create(&file_path).unwrap();
+                let mut file = File::create("/extern/data/planet-latest.osm.pbf").unwrap();
                 file.write_all(&response.bytes().unwrap()).unwrap();
             }
             _ => {}
@@ -357,7 +366,7 @@ impl Dataset {
         match self {
             Dataset::Dblp => {
                 let _ = remove_file("/extern/data/dblp.xml");
-            },
+            }
             Dataset::OsmPlanet => {
                 let _ = remove_file("/extern/data/planet-latest.osm.pbf");
             }
@@ -446,8 +455,8 @@ impl Connection {
 
     /// Resets connection in different ways to ensure a cold run.
     /// Passes cooldown paramaters to connection.
-    pub fn cooldown(&mut self) -> () {
-        return match self {
+    pub fn cooldown(&mut self) {
+        match self {
             Connection::QLever(connection) => {
                 connection.cooldown();
             }
@@ -499,7 +508,7 @@ impl TestResult {
         self.results.push(time);
     }
 
-    pub fn inc_failures(&mut self) -> () {
+    pub fn inc_failures(&mut self) {
         self.failures += 1;
     }
 }
@@ -585,26 +594,27 @@ impl AggregateTestResult {
 /// * `filename` - Path to the query file.
 /// * `iterations` - How often the set of queries should be executed.
 /// * `connection` - Connection to which the queries should be send.
-/// * `hotrun` - Whether it is a hotrun, where no cooldown or cache reset is used and .
+/// * `hotrun` - Whether it is a hotrun, where no cooldown or cache reset is used
+///
 /// Returns a [`Vec`]<[`TestResult`]>
 fn run_test(
-    filename: &String,
+    filename: &str,
     iterations: usize,
     connection: &mut Connection,
     hotrun: bool,
 ) -> Result<Vec<TestResult>, Box<dyn Error>> {
-    let queries = read_test_file(filename.as_str())?;
+    let queries = read_test_file(filename)?;
     // Initialize 2D Vector for results
-    let mut results: Vec<TestResult> = (0..queries.len()).map(|id| TestResult::new(id)).collect();
+    let mut results: Vec<TestResult> = (0..queries.len()).map(TestResult::new).collect();
 
     if hotrun {
         // Warm up the database
         for _ in 0..5 {
-            for (_, record) in queries.iter().enumerate() {
+            for record in queries.iter() {
                 let _ = connection.run_test_query(record);
             }
         }
-        println!("Finished warmup");
+        trace!("Finished warmup");
     }
 
     for iter in 0..iterations {
@@ -618,11 +628,11 @@ fn run_test(
             match result {
                 Ok(time) => {
                     results[id].add_time(time);
-                    println!("Finished query {id} iteration: {iter} with {time}ms");
+                    trace!("Finished query {id} iteration: {iter} with {time}ms");
                 }
                 Err(_) => {
                     results[id].inc_failures();
-                    println!("Finished query {id} iteration: {iter} with failure");
+                    warn!("Finished query {id} iteration: {iter} with failure");
                 }
             }
         }
@@ -640,6 +650,7 @@ fn clear_cache() -> Result<(), Box<dyn Error>> {
         .output()?;
 
     if !out.status.success() {
+        error!("Dropping caches failed");
         return Err(format!(
             "drop_caches failed: {}",
             String::from_utf8_lossy(&out.stderr)
@@ -686,7 +697,7 @@ fn write_results_aggregated(
     Ok(())
 }
 
-fn clean_up() -> () {
+fn clean_up() {
     let _ = remove_dir_all("/extern/data");
 }
 
@@ -698,6 +709,7 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
     let response = client.get(url).send().await?;
 
     if !response.status().is_success() {
+        error!("Download of dblp data failed: {response:?}");
         return Err(format!(
             "HTTP request failed with status: {}",
             response.status().as_str()
@@ -705,9 +717,7 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
         .into());
     }
 
-    let stream = response
-        .bytes_stream()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
+    let stream = response.bytes_stream().map_err(std::io::Error::other);
 
     let reader = StreamReader::new(stream);
 
@@ -719,7 +729,7 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
     decoder.read_to_end(&mut buffer).await?;
     output_file.write_all(&buffer).await?;
 
-    println!("Download successful");
+    trace!("Download successful");
     Ok(())
 }
 

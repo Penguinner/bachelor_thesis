@@ -265,9 +265,7 @@ impl QLeverConnection {
             // Do Test request
             let result = self.do_query_request("SELECT * WHERE {?s ?p ?o} LIMIT 1");
             match result {
-                Ok(_) => {
-                    return
-                }
+                Ok(_) => return,
                 Err(e) => {
                     error!("Failure during HTTP request: {:?}", e);
                 }
@@ -544,11 +542,13 @@ fn command_assist(
         .current_dir(current_dir)
         .output()
         .unwrap_or_else(|e| {
-            let error = "Failed executing command ".to_string() + command_str + " " + args.join(" ").as_str();
+            let error = "Failed executing command ".to_string()
+                + command_str
+                + " "
+                + args.join(" ").as_str();
             error!("{error}:{e}");
             panic!("{error}")
-        }
-        );
+        });
     info!(
         "executed_command: {}",
         command_str.to_string() + " " + args.join(" ").as_str()

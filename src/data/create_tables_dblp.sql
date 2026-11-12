@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS Authors(
 );
 
 CREATE TABLE IF NOT EXISTS Publications(
-    key VARCHAR(255) PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
+    key VARCHAR(255),
     mdate DATE NOT NULL,
     title TEXT NOT NULL,
     year INTEGER,
@@ -56,27 +57,27 @@ CREATE TABLE IF NOT EXISTS Resources(
 );
 
 CREATE TABLE IF NOT EXISTS PublicationEditors (
-    publication_key VARCHAR(255),
-    editor_id INT,
-    PRIMARY KEY (publication_key, editor_id),
-    FOREIGN KEY (publication_key) REFERENCES Publications(key),
+    publication_id INTEGER,
+    editor_id INTEGER,
+    PRIMARY KEY (publication_id, editor_id),
+    FOREIGN KEY (publication_id) REFERENCES Publications(id),
     FOREIGN KEY (editor_id) REFERENCES Editors(id)
 );
 
 CREATE TABLE IF NOT EXISTS Reference(
     type ref_type,
-    origin_pub VARCHAR(255),
-    dest_pub VARCHAR(255),
+    origin_pub INTEGER,
+    dest_pub INTEGER,
     PRIMARY KEY (type, origin_pub, dest_pub),
-    FOREIGN KEY(origin_pub) REFERENCES Publications(key),
-    FOREIGN KEY(dest_pub) REFERENCES Publications(key)
+    FOREIGN KEY(origin_pub) REFERENCES Publications(id),
+    FOREIGN KEY(dest_pub) REFERENCES Publications(id)
 );
 
 CREATE TABLE PublicationAuthors(
-    publication_key VARCHAR(255),
+    publication_id INTEGER,
     author_id INT,
-    PRIMARY KEY (publication_key, author_id),
-    FOREIGN KEY (publication_key) REFERENCES Publications(key),
+    PRIMARY KEY (publication_id, author_id),
+    FOREIGN KEY (publication_id) REFERENCES Publications(id),
     FOREIGN KEY (author_id) REFERENCES Authors(key)
 );
 
