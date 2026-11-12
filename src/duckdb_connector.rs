@@ -25,7 +25,6 @@ impl DuckDBConnection {
         // Create DuckDB database at db.duckdb
         let mut conn = DuckDBConnection {
             connection: Connection::open("db.duckdb").unwrap(),
-            dataset: dataset.clone(),
         };
         // Additional initialization depending on dataset
         match dataset {
