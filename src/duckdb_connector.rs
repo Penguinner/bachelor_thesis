@@ -6,6 +6,7 @@ use crate::{
 use duckdb::{Connection, Rows, Statement, params};
 use log::{info, trace};
 use std::error::Error;
+use std::io::Read;
 use std::fs;
 use std::fs::File;
 
@@ -14,7 +15,6 @@ use crate::Dataset;
 /// Connection for a DuckDB Database
 pub struct DuckDBConnection {
     connection: Connection,
-    dataset: Dataset,
 }
 
 impl DuckDBConnection {
@@ -131,7 +131,6 @@ impl DuckDBConnection {
         let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
         let duration = (duration_secs * 1000.0).round() as u128;
         // Write query result info to log
-        let logmsg: String;
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(_) => {
                 info!(
