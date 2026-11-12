@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS Resources(
     type VARCHAR(255) NOT NULL,
     value TEXT NOT NULL,
     publication_key VARCHAR(255),
-    FOREIGN KEY (publication_key) REFERENCES Publications(key)
+    FOREIGN KEY (publication_key) REFERENCES Publications(id)
 );
 
 CREATE TABLE IF NOT EXISTS PublicationEditors (
