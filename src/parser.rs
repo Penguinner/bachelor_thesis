@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, exists};
 use std::io::BufReader;
 
 /// Parser for parsing the DBLP xml data into a SQL structure
@@ -780,14 +780,8 @@ impl WriteManager {
         self.venues.push(venue);
         // If list of venue exceeds 10000 write all of them to file
         if self.venues.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).create(true).open(VENUE_FILE).unwrap());
-            for v in &self.venues {
-                wrt.serialize(v).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.venues.clear()
+            let stores = self.venues.drain(0..).collect();
+            WriteManager::write_to_file(VENUE_FILE, stores);
         }
     }
 
@@ -797,18 +791,8 @@ impl WriteManager {
         self.publishers.push(publisher);
         // If list of publishers exceeds 10000 write all of them to file
         if self.publishers.len() == 10000 {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(PUBLISHER_FILE)
-                    .unwrap(),
-            );
-            for p in &self.publishers {
-                wrt.serialize(p).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.publishers.clear()
+            let stores = self.publishers.drain(0..).collect();
+            WriteManager::write_to_file(PUBLISHER_FILE, stores);
         }
     }
 
@@ -818,14 +802,8 @@ impl WriteManager {
         self.editors.push(editor);
         // If list of editors exceeds 10000 write all of them to file
         if self.editors.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).create(true).open(EDITOR_FILE).unwrap());
-            for e in &self.editors {
-                wrt.serialize(e).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.editors.clear()
+            let stores = self.editors.drain(0..).collect();
+            WriteManager::write_to_file(EDITOR_FILE, stores);
         }
     }
 
@@ -835,14 +813,8 @@ impl WriteManager {
         self.authors.push(author);
         // If list of authors exceeds 10000 write all of them to file
         if self.authors.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).create(true).open(AUTHOR_FILE).unwrap());
-            for a in &self.authors {
-                wrt.serialize(a).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.authors.clear()
+            let stores = self.authors.drain(0..).collect();
+            WriteManager::write_to_file(AUTHOR_FILE, stores);
         }
     }
 
@@ -852,18 +824,8 @@ impl WriteManager {
         self.publications.push(publication);
         // If list of authors exceeds 10000 write all of them to file
         if self.publications.len() == 10000 {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(PUBLICATION_FILE)
-                    .unwrap(),
-            );
-            for p in &self.publications {
-                wrt.serialize(p).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.publications.clear()
+            let stores = self.publications.drain(0..).collect();
+            WriteManager::write_to_file(PUBLICATION_FILE, stores);
         }
     }
 
@@ -873,18 +835,8 @@ impl WriteManager {
         self.resources.push(resource);
         // If list of resources exceeds 10000 write all of them to file
         if self.resources.len() == 10000 {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(RESOURCES_FILE)
-                    .unwrap(),
-            );
-            for r in &self.resources {
-                wrt.serialize(r).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.resources.clear()
+            let stores = self.resources.drain(0..).collect();
+            WriteManager::write_to_file(RESOURCES_FILE, stores);
         }
     }
 
@@ -894,18 +846,8 @@ impl WriteManager {
         self.publication_editors.push(pub_editor);
         // If list of publication editors exceeds 10000 write all of them to file
         if self.publication_editors.len() == 10000 {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(PUBLICATION_EDITOR_FILE)
-                    .unwrap(),
-            );
-            for p in &self.publication_editors {
-                wrt.serialize(p).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.publication_editors.clear()
+            let stores = self.publication_editors.drain(0..).collect();
+            WriteManager::write_to_file(PUBLICATION_EDITOR_FILE, stores);
         }
     }
 
@@ -915,18 +857,8 @@ impl WriteManager {
         self.references.push(reference);
         // If list of refrences exceeds 10000 write all of them to file
         if self.references.len() == 10000 {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(REFERENCE_FILE)
-                    .unwrap(),
-            );
-            for r in &self.references {
-                wrt.serialize(r).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.references.clear()
+            let stores = self.references.drain(0..).collect();
+            WriteManager::write_to_file(REFERENCE_FILE, stores);
         }
     }
 
@@ -936,18 +868,8 @@ impl WriteManager {
         self.publication_authors.push(pub_auth);
         // If list of publication authors exceeds 10000 write all of them to file
         if self.publication_authors.len() == 10000 {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(PUBLICATION_AUTHORS_FILE)
-                    .unwrap(),
-            );
-            for p in &self.publication_authors {
-                wrt.serialize(p).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.publication_authors.clear()
+            let stores = self.publication_authors.drain(0..).collect();
+            WriteManager::write_to_file(PUBLICATION_AUTHORS_FILE, stores);
         }
     }
 
@@ -957,18 +879,8 @@ impl WriteManager {
         self.author_websites.push(auth_web);
         // If list of author websites exceeds 10000 write all of them to file
         if self.author_websites.len() == 10000 {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(AUTHOR_WEBSITES_FILE)
-                    .unwrap(),
-            );
-            for aw in &self.author_websites {
-                wrt.serialize(aw).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.author_websites.clear()
+            let stores = self.author_websites.drain(0..).collect();
+            WriteManager::write_to_file(AUTHOR_WEBSITES_FILE, stores);
         }
     }
 
@@ -978,18 +890,8 @@ impl WriteManager {
         self.affiliations.push(aff);
         // If list of affiliations exceeds 10000 write all of them to file
         if self.affiliations.len() == 10000 {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(AFFILIATIONS_FILE)
-                    .unwrap(),
-            );
-            for a in &self.affiliations {
-                wrt.serialize(a).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.affiliations.clear()
+            let stores = self.affiliations.drain(0..).collect();
+            WriteManager::write_to_file(AFFILIATIONS_FILE, stores);
         }
     }
 
@@ -999,14 +901,8 @@ impl WriteManager {
         self.aliases.push(alias);
         // If list of aliases exceeds 10000 write them to file
         if self.aliases.len() == 10000 {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).create(true).open(ALIAS_FILE).unwrap());
-            for a in &self.aliases {
-                wrt.serialize(a).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.aliases.clear()
+            let stores = self.aliases.drain(0..).collect();
+            WriteManager::write_to_file(ALIAS_FILE, stores);
         }
     }
 
@@ -1014,168 +910,82 @@ impl WriteManager {
     pub fn finalize(&mut self) {
         // Venues
         if !self.venues.is_empty() {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).create(true).open(VENUE_FILE).unwrap());
-            for venue in &self.venues {
-                wrt.serialize(venue).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.venues.clear()
+            let stores = self.venues.drain(0..).collect();
+            WriteManager::write_to_file(VENUE_FILE, stores);
         }
         // Publishers
         if !self.publishers.is_empty() {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(PUBLISHER_FILE)
-                    .unwrap(),
-            );
-            for tuple in &self.publishers {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.publishers.clear()
+            let stores = self.publishers.drain(0..).collect();
+            WriteManager::write_to_file(PUBLISHER_FILE, stores);
         }
         // Editors
         if !self.editors.is_empty() {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).create(true).open(EDITOR_FILE).unwrap());
-            for tuple in &self.editors {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.editors.clear()
+            let stores = self.editors.drain(0..).collect();
+            WriteManager::write_to_file(EDITOR_FILE, stores);
         }
         // Affiliations
         if !self.affiliations.is_empty() {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(AFFILIATIONS_FILE)
-                    .unwrap(),
-            );
-            for tuple in &self.affiliations {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.affiliations.clear()
+            let stores = self.affiliations.drain(0..).collect();
+            WriteManager::write_to_file(AFFILIATIONS_FILE, stores);
         }
         // Authors
         if !self.authors.is_empty() {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).create(true).open(AUTHOR_FILE).unwrap());
-            for tuple in &self.authors {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.authors.clear()
+            let stores = self.authors.drain(0..).collect();
+            WriteManager::write_to_file(AUTHOR_FILE, stores);
         }
         // Publications
         if !self.publications.is_empty() {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(PUBLICATION_FILE)
-                    .unwrap(),
-            );
-            for tuple in &self.publications {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.publications.clear()
+            let stores = self.publications.drain(0..).collect();
+            WriteManager::write_to_file(PUBLICATION_FILE, stores);
         }
         // Resources
         if !self.resources.is_empty() {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(RESOURCES_FILE)
-                    .unwrap(),
-            );
-            for tuple in &self.resources {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.resources.clear()
+            let stores = self.resources.drain(0..).collect();
+            WriteManager::write_to_file(RESOURCES_FILE, stores);
         }
         // Publication Editors
         if !self.publication_editors.is_empty() {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(PUBLICATION_EDITOR_FILE)
-                    .unwrap(),
-            );
-            for tuple in &self.publication_editors {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.publication_editors.clear()
+            let stores = self.publication_editors.drain(0..).collect();
+            WriteManager::write_to_file(PUBLICATION_EDITOR_FILE, stores);
         }
         // References
         if !self.references.is_empty() {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(REFERENCE_FILE)
-                    .unwrap(),
-            );
-            for tuple in &self.references {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.references.clear()
+            let stores = self.references.drain(0..).collect();
+            WriteManager::write_to_file(REFERENCE_FILE, stores);
         }
         // Publication Authors
         if !self.publication_authors.is_empty() {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(PUBLICATION_AUTHORS_FILE)
-                    .unwrap(),
-            );
-            for tuple in &self.publication_authors {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.publication_authors.clear()
+            let stores = self.publication_authors.drain(0..).collect();
+            WriteManager::write_to_file(PUBLICATION_AUTHORS_FILE, stores);
         }
         // Author Websites
         if !self.author_websites.is_empty() {
-            let mut wrt = WriterBuilder::new().delimiter(b'\t').from_writer(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(AUTHOR_WEBSITES_FILE)
-                    .unwrap(),
-            );
-            for tuple in &self.author_websites {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.author_websites.clear()
+            let stores = self.author_websites.drain(0..).collect();
+            WriteManager::write_to_file(AUTHOR_WEBSITES_FILE, stores);
         }
         // Aliases
         if !self.aliases.is_empty() {
-            let mut wrt = WriterBuilder::new()
-                .delimiter(b'\t')
-                .from_writer(OpenOptions::new().append(true).create(true).open(ALIAS_FILE).unwrap());
-            for tuple in &self.aliases {
-                wrt.serialize(tuple).unwrap();
-            }
-            wrt.flush().unwrap();
-            self.aliases.clear()
+            let stores = self.aliases.drain(0..).collect();
+            WriteManager::write_to_file(ALIAS_FILE, stores);
         }
+    }
+
+    fn write_to_file(file: &str, stores: Vec<impl Serialize>) {
+        let has_header = exists(file).unwrap();
+        let mut wrt = WriterBuilder::new()
+            .has_headers(has_header)
+            .delimiter(b'\t')
+            .from_writer(
+                OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(file)
+                .unwrap()
+            );
+        for store in stores {
+            wrt.serialize(store).unwrap();
+        }
+        wrt.flush().unwrap();
     }
 }
 
