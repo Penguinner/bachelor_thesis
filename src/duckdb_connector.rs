@@ -6,9 +6,9 @@ use crate::{
 use duckdb::{Connection, Rows, Statement, params};
 use log::{info, trace};
 use std::error::Error;
-use std::io::Read;
 use std::fs;
 use std::fs::File;
+use std::io::Read;
 
 use crate::Dataset;
 

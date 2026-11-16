@@ -597,11 +597,9 @@ impl Parser {
 
     /// Read the text of a tag as Integer
     fn read_int(&mut self, start: &BytesStart) -> Result<usize, Box<dyn Error>> {
-        let value = self.read_text(start)?;
-        Ok(value.parse::<usize>().unwrap_or_else(|e1| {
-            let name = String::from_utf8_lossy(start.name().as_ref()).into_owned();
-            panic!("key: {name} value:{value} {e1}")
-        }))
+        let value = self.read_text(start)?
+            .parse::<usize>()?;
+        Ok(value)
     }
 }
 
@@ -971,16 +969,16 @@ impl WriteManager {
     }
 
     fn write_to_file(file: &str, stores: Vec<impl Serialize>) {
-        let has_header = exists(file).unwrap();
+        let has_header = !exists(file).unwrap();
         let mut wrt = WriterBuilder::new()
             .has_headers(has_header)
             .delimiter(b'\t')
             .from_writer(
                 OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(file)
-                .unwrap()
+                    .append(true)
+                    .create(true)
+                    .open(file)
+                    .unwrap(),
             );
         for store in stores {
             wrt.serialize(store).unwrap();
