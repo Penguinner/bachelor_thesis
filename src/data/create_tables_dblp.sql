@@ -52,8 +52,8 @@ CREATE TABLE IF NOT EXISTS Resources(
     id INTEGER PRIMARY KEY,
     type VARCHAR(255) NOT NULL,
     value TEXT NOT NULL,
-    publication_key VARCHAR(255),
-    FOREIGN KEY (publication_key) REFERENCES Publications(id)
+    publication_id INTEGER,
+    FOREIGN KEY (publication_id) REFERENCES Publications(id)
 );
 
 CREATE TABLE IF NOT EXISTS PublicationEditors (
