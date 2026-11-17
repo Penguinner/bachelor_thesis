@@ -46,6 +46,7 @@ impl DuckDBConnection {
     /// Flushes the statement cache to ensure cold queries
     pub fn cooldown(&mut self) -> () {
         self.connection.flush_prepared_statement_cache();
+        self.activate_profiling()
     }
 
     /// Activates DuckDBs profiling to time queries
