@@ -19,8 +19,7 @@ use std::ops::Div;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
-use std::{matches, panic, vec};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::{matches, panic, unreachable, vec};
 use tokio::runtime::Runtime;
 use tokio_util::io::StreamReader;
 
@@ -720,29 +719,32 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
     let url = "https://dblp.org/xml/dblp.xml.gz";
 
     let client = reqwest::Client::new();
-    let response = client.get(url).send().await?;
+    const MAX_RETRIES: u32 = 10;
 
-    if !response.status().is_success() {
-        error!("Download of dblp data failed: {response:?}");
-        return Err(format!(
-            "HTTP request failed with status: {}",
-            response.status().as_str()
-        )
-        .into());
+    for attempt in 0..=MAX_RETRIES {
+        match download_attempt(&client, url, &filename).await {
+            Ok(()) => return Ok(()),
+            Err(e) if attempt < MAX_RETRIES => {
+                let backoff = Duration::from_secs(2u64.pow(attempt));
+                warn!("Download failed (attempt {}), retrying in {:?}: {}", attempt +1, backoff, e);
+                tokio::time::sleep(backoff).await;
+            }
+            Err(e) => return Err(e),
+        }
     }
+    unreachable!()
+}
 
+async fn download_attempt(client: &reqwest::Client, url: &str, filename: &str) -> Result<(), Box<dyn Error>> {
+    let response = client.get(url).send().await?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP request failed with status: {}", response.status()).into());
+    }
     let stream = response.bytes_stream().map_err(std::io::Error::other);
-
     let reader = StreamReader::new(stream);
-
     let mut decoder = GzipDecoder::new(reader);
-
-    let mut output_file = tokio::fs::File::create(filename).await?;
-
-    let mut buffer = Vec::new();
-    decoder.read_to_end(&mut buffer).await?;
-    output_file.write_all(&buffer).await?;
-
+    let mut output = tokio::fs::File::create(filename).await?;
+    tokio::io::copy(&mut decoder, &mut output).await?;
     trace!("Download successful");
     Ok(())
 }
