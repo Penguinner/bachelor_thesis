@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, create_dir_all, exists, remove_dir_all, remove_file};
 use std::io::Write;
+use std::ops::Div;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
@@ -522,7 +523,8 @@ pub struct AggregateTestResult {
     quart_1: String,
     median: String,
     quart_3: String,
-    avg: String,
+    arith_mean: String,
+    geom_mean: String,
     mode: String,
     failures: String,
 }
@@ -535,13 +537,23 @@ impl AggregateTestResult {
         let mut quart_1: String = String::from("-");
         let mut median: String = String::from("-");
         let mut quart_3: String = String::from("-");
-        let mut avg: String = String::from("-");
+        let mut arith_mean: String = String::from("-");
+        let mut geom_mean: String = String::from("-");
         let mut mode: String = String::from("-");
         if !numbers.is_empty() {
             numbers.sort();
-            avg = format!(
+            arith_mean = format!(
                 "{:.2}",
                 (numbers.iter().sum::<u128>() as f64 / numbers.len() as f64)
+            );
+            let geom_value = numbers.iter()
+                .map(|v| {(*v as f64).ln()})
+                .sum::<f64>()
+                .div(numbers.len() as f64)
+                .exp();
+            geom_mean = format!(
+                "{:.2}",
+                geom_value
             );
             min = numbers.first().unwrap().to_string();
             max = numbers.last().unwrap().to_string();
@@ -567,7 +579,8 @@ impl AggregateTestResult {
             quart_1,
             median,
             quart_3,
-            avg,
+            arith_mean,
+            geom_mean,
             mode,
             failures: raw_result.failures.to_string(),
         }
@@ -795,7 +808,8 @@ mod tests {
         assert_eq!(agg.quart_1, "30.50");
         assert_eq!(agg.median, "50.00");
         assert_eq!(agg.quart_3, "82.50");
-        assert_eq!(agg.avg, "60.14");
+        assert_eq!(agg.arith_mean, "60.14");
+        assert_eq!(agg.geom_mean, "50.84");
         assert_eq!(agg.mode, "25");
         assert_eq!(agg.failures, "0")
     }
@@ -813,7 +827,8 @@ mod tests {
         assert_eq!(agg.quart_1, "-");
         assert_eq!(agg.median, "-");
         assert_eq!(agg.quart_3, "-");
-        assert_eq!(agg.avg, "-");
+        assert_eq!(agg.arith_mean, "-");
+        assert_eq!(agg.geom_mean, "-");
         assert_eq!(agg.mode, "-");
         assert_eq!(agg.failures, "10")
     }
@@ -838,7 +853,8 @@ mod tests {
         assert_eq!(agg.quart_1, "30.50");
         assert_eq!(agg.median, "50.00");
         assert_eq!(agg.quart_3, "82.50");
-        assert_eq!(agg.avg, "60.14");
+        assert_eq!(agg.arith_mean, "60.14");
+        assert_eq!(agg.geom_mean, "50.84");
         assert_eq!(agg.mode, "25");
         assert_eq!(agg.failures, "10")
     }
@@ -850,7 +866,7 @@ mod tests {
         let tmpfile_path = tmpdir.path().join("result.tsv");
         let tmp_file = File::create(tmpfile_path.clone()).unwrap();
         let number_results: Vec<u128> = vec![
-            160, 20, 46, 129, 146, 197, 23, 4, 159, 107, 199, 200, 142, 122, 13, 78, 198, 167, 100,
+            160, 20, 46, 129, 146, 197, 23, 4, 159, 107, 199, 200, 142, 100, 13, 78, 198, 167, 100,
             65,
         ];
 
@@ -900,8 +916,8 @@ mod tests {
         let mut string = String::new();
         let _ = file.read_to_string(&mut string);
         let result_string = concat!(
-            "min\tmax\tquart_1\tmedian\tquart_3\tavg\tmode\tfailures\n",
-            "4\t200\t60.25\t118.00\t161.75\t112.65\t100\t1\n"
+            "min\tmax\tquart_1\tmedian\tquart_3\tarith_mean\tgeom_mean\tmode\tfailures\n",
+            "4\t200\t60.25\t118.00\t161.75\t112.65\t79.64\t100\t1\n"
         );
         assert_eq!(string, result_string);
     }
