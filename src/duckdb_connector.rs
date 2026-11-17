@@ -44,7 +44,7 @@ impl DuckDBConnection {
     }
 
     /// Flushes the statement cache to ensure cold queries
-    pub fn cooldown(&mut self) -> () {
+    pub fn cooldown(&mut self) {
         self.connection.flush_prepared_statement_cache();
     }
 
@@ -68,9 +68,9 @@ impl DuckDBConnection {
 
     /// Use ST_ReadOSM to read osm planet data to duckdb.
     fn load_osm_planet_data(&mut self) {
-        let file_path = format!("/extern/data/planet-latest.osm.pbf");
-        let query = format!("CREATE TABLE osm AS SELECT * FROM ST_ReadOSM('{file_path}');");
-        self.connection.execute(&query, []).unwrap();
+        let query =
+            "CREATE TABLE osm AS SELECT * FROM ST_ReadOSM('/extern/data/planet-latest.osm.pbf');";
+        self.connection.execute(query, []).unwrap();
     }
 
     /// Creates all tables necessary for the dblp dataset.
@@ -118,7 +118,7 @@ impl DuckDBConnection {
     }
 
     /// Runs a test query on duckdb database
-    pub fn run_test_query(&self, query: &str) -> Result<u128, Box<dyn Error>> {
+    pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
         self.activate_profiling();
         // Execute the query
         let mut stmt: Statement<'_> = self.connection.prepare(query)?;

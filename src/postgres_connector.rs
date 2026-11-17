@@ -11,20 +11,26 @@ use bollard::query_parameters::{
 };
 use futures::TryStreamExt;
 use log::{info, trace};
-use postgres::{Client, NoTls, Row};
+use postgres::{Client, NoTls};
+use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Seek, Write};
 use std::process::Command;
+use std::sync::OnceLock;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use std::{format, vec};
 use tokio::runtime::Runtime;
 
 /// Connection for PostgreSQL Database
 pub struct PostgresConnection {
     client: Client,
     docker_id: String,
+    log_path: String,
+    log_stream: Option<BufReader<File>>,
+    log_pending: String,
 }
 
 impl PostgresConnection {
@@ -69,6 +75,7 @@ impl PostgresConnection {
             );
 
             // Create Container
+            let log_path = format!("/extern/data/{}", dataset.name());
             let config = ContainerCreateBody {
                 image: Some(image.into()),
                 env: Some(vec![
@@ -76,15 +83,27 @@ impl PostgresConnection {
                     "POSTGRES_USER=postgres".to_string(),
                     "POSTGRES_DB=database".to_string(),
                 ]),
+                cmd: Some(vec![
+                    "postgres".to_string(),
+                    "-c".to_string(),
+                    "logging_collector=on".to_string(),
+                    "-c".to_string(),
+                    "log_duration=on".to_string(),
+                    "-c".to_string(),
+                    format!("log_directory={}", log_path).to_string(),
+                    "-c".to_string(),
+                    "log_filename=postgresql.log".to_string(),
+                ]),
                 host_config: Some(HostConfig {
+                    binds: Some(vec![format!(
+                        "/extern/data/{}:{}",
+                        dataset.name(),
+                        log_path
+                    )]),
                     port_bindings: Some(port_bindings),
                     ..Default::default()
                 }),
-                exposed_ports: Some({
-                    let mut ports = HashMap::new();
-                    ports.insert("5432/tcp".to_string(), HashMap::new());
-                    ports
-                }),
+                exposed_ports: Some(vec![String::from("5432/tcp")]),
                 ..Default::default()
             };
 
@@ -113,6 +132,9 @@ impl PostgresConnection {
         let mut conn = PostgresConnection {
             client,
             docker_id: id,
+            log_path: format!("/extern/data/{}/postgresql.log", dataset.name()),
+            log_stream: None,
+            log_pending: String::new(),
         };
         // Additional initialization depending on dataset
         match dataset {
@@ -125,8 +147,17 @@ impl PostgresConnection {
                 conn.insert_osm_data();
             }
         }
+        conn.open_log_stream()?;
         trace!("Finished creating Postgres client");
         Ok(conn)
+    }
+
+    fn open_log_stream(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut file = File::open(&self.log_path)?;
+        file.seek(std::io::SeekFrom::End(0))?;
+        self.log_stream = Some(BufReader::new(file));
+        self.log_pending.clear();
+        Ok(())
     }
 
     /// Restart Docker container to ensure cold running condition
@@ -210,6 +241,38 @@ impl PostgresConnection {
         trace!("Inserted DBLP data into Postgres");
     }
 
+    pub fn read_latest_duration(&mut self) -> Result<u128, Box<dyn Error>> {
+        const QUIET: Duration = Duration::from_millis(50);
+        const DEADLINE: Duration = Duration::from_secs(2);
+        let reader = self.log_stream.as_mut().ok_or("log stream not open")?;
+        let deadline = Instant::now() + DEADLINE;
+        let mut last_match: Option<(u128, Instant)> = None;
+
+        loop {
+            let mut chunk = String::new();
+            let n = reader.read_line(&mut chunk)?;
+
+            if n > 0 {
+                self.log_pending.push_str(&chunk);
+                while let Some(nl) = self.log_pending.find('\n') {
+                    let line: String = self.log_pending.drain(..=nl).collect();
+                    if let Some(ms) = parse_duration_ms(&line) {
+                        last_match = Some((ms, Instant::now()));
+                    }
+                }
+            } else {
+                if let Some((ms, t)) = last_match {
+                    if t.elapsed() >= QUIET || Instant::now() >= deadline {
+                        return Ok(ms);
+                    }
+                } else if Instant::now() >= deadline {
+                    return Err("timed out waiting for duration line".into());
+                }
+                sleep(Duration::from_millis(5));
+            }
+        }
+    }
+
     /// Run a test query on the PostgreSQL database.
     pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Recreate client if connection was closed
@@ -217,24 +280,25 @@ impl PostgresConnection {
             self.client = create_client();
         }
         // Execute Query
-        let stmt = self.client.prepare(query)?;
-        let now = Instant::now();
-        let response: Result<Vec<Row>, postgres::Error> = self.client.query(&stmt, &[]);
-        let duration = now.elapsed().as_millis();
+        let response = self.client.simple_query(query);
         // Write Result info to log
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(data) => {
                 // Get columns from first row
+                let duration = self.read_latest_duration()?;
                 let mut columns = 0;
-                if let Some(row) = data.first() {
-                    columns = row.len();
+                let mut rows = 0;
+                for msg in &data {
+                    if let postgres::SimpleQueryMessage::Row(row) = msg {
+                        if columns == 0 {
+                            columns = row.len()
+                        }
+                        rows += 1;
+                    }
                 }
                 info!(
                     "Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}\n",
-                    query,
-                    duration,
-                    columns,
-                    data.len()
+                    query, duration, columns, rows
                 );
                 Ok(duration)
             }
@@ -324,4 +388,27 @@ pub fn create_client() -> Client {
         }
     }
     client
+}
+
+fn parse_duration_ms(line: &str) -> Option<u128> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"duration:\s+(\d+(?:\.\d+)?)\s+ms").unwrap());
+    let caps = re.captures(line)?;
+    let ms: f64 = caps.get(1)?.as_str().parse().ok()?;
+    Some(ms.round() as u128)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::assert_eq;
+
+    #[test]
+    fn test_duration_parse() {
+        let result = parse_duration_ms("duration: 20.000 ms");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), 20u128);
+
+        assert!(parse_duration_ms("Test Test").is_none())
+    }
 }

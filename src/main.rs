@@ -403,7 +403,9 @@ impl Database {
             Database::QLever => Ok(Connection::QLever(QLeverConnection::new(dataset)?)),
             #[cfg(feature = "duckdb")]
             Database::DuckDB => Ok(Connection::DuckDB(DuckDBConnection::new(dataset)?)),
-            Database::Postgres => Ok(Connection::PostGres(PostgresConnection::new(dataset)?)),
+            Database::Postgres => Ok(Connection::PostGres(Box::new(PostgresConnection::new(
+                dataset,
+            )?))),
         }
     }
 }
@@ -436,7 +438,7 @@ fn read_test_file(filename: &str) -> Result<Vec<TSVRecord>, Box<dyn Error>> {
 pub enum Connection {
     #[cfg(feature = "duckdb")]
     DuckDB(DuckDBConnection),
-    PostGres(PostgresConnection),
+    PostGres(Box<PostgresConnection>),
     QLever(QLeverConnection),
 }
 
@@ -545,15 +547,13 @@ impl AggregateTestResult {
                 "{:.2}",
                 (numbers.iter().sum::<u128>() as f64 / numbers.len() as f64)
             );
-            let geom_value = numbers.iter()
-                .map(|v| {(*v as f64).ln()})
+            let geom_value = numbers
+                .iter()
+                .map(|v| (*v as f64).ln())
                 .sum::<f64>()
                 .div(numbers.len() as f64)
                 .exp();
-            geom_mean = format!(
-                "{:.2}",
-                geom_value
-            );
+            geom_mean = format!("{:.2}", geom_value);
             min = numbers.first().unwrap().to_string();
             max = numbers.last().unwrap().to_string();
             quart_1 = format!("{:.2}", (Self::percentile(&numbers, 0.25)));
@@ -728,7 +728,12 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
             Ok(()) => return Ok(()),
             Err(e) if attempt < MAX_RETRIES => {
                 let backoff = Duration::from_secs(2u64.pow(attempt));
-                warn!("Download failed (attempt {}), retrying in {:?}: {}", attempt +1, backoff, e);
+                warn!(
+                    "Download failed (attempt {}), retrying in {:?}: {}",
+                    attempt + 1,
+                    backoff,
+                    e
+                );
                 tokio::time::sleep(backoff).await;
             }
             Err(e) => return Err(e),
@@ -737,7 +742,11 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
     unreachable!()
 }
 
-async fn download_attempt(client: &reqwest::Client, url: &str, filename: &str) -> Result<(), Box<dyn Error>> {
+async fn download_attempt(
+    client: &reqwest::Client,
+    url: &str,
+    filename: &str,
+) -> Result<(), Box<dyn Error>> {
     let response = client.get(url).send().await?;
     if !response.status().is_success() {
         return Err(format!("HTTP request failed with status: {}", response.status()).into());

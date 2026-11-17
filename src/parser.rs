@@ -5,6 +5,7 @@ use crate::{
 };
 use csv::WriterBuilder;
 use quick_xml::Reader;
+use quick_xml::XmlVersion::Explicit1_0;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use regex::Regex;
@@ -14,6 +15,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs::{File, OpenOptions, exists};
 use std::io::BufReader;
+use std::str::FromStr;
 
 /// Parser for parsing the DBLP xml data into a SQL structure
 pub struct Parser {
@@ -69,7 +71,7 @@ impl Parser {
         // Read xml events
         loop {
             match self.reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) if matches!(e.name().as_ref(), b"dblp") => {} // Skip if the tag is dblp
+                Ok(Event::Start(e)) if matches!(e.name().as_ref(), "dblp") => {} // Skip if the tag is dblp
                 Ok(Event::Start(e)) if Parser::is_person(&e) => self.read_person(&e).unwrap(),
                 Ok(Event::Start(e)) if Parser::is_publication(e.name().as_ref()) => {
                     self.read_publication(&e).unwrap()
@@ -91,17 +93,17 @@ impl Parser {
 
     /// Checks if a given xml tag is a publication.
     /// Accepts "\<article>", "<inproceedings>", "\<proceedings>", "\<book>", "\<incollection>", "\<phdthesis>", "\<masterthesis>" and "\<www>"
-    fn is_publication(tag: &[u8]) -> bool {
+    fn is_publication(tag: &str) -> bool {
         matches!(
             tag,
-            b"article"
-                | b"inproceedings"
-                | b"proceedings"
-                | b"book"
-                | b"incollection"
-                | b"phdthesis"
-                | b"masterthesis"
-                | b"www"
+            "article"
+                | "inproceedings"
+                | "proceedings"
+                | "book"
+                | "incollection"
+                | "phdthesis"
+                | "masterthesis"
+                | "www"
         )
     }
 
@@ -111,7 +113,7 @@ impl Parser {
         let tag = e.name();
         if let Some(attr) = e.try_get_attribute("key").unwrap() {
             let key = attr.value.as_ref();
-            return matches!(tag.as_ref(), b"www") && key.starts_with(b"homepages/");
+            return matches!(tag.as_ref(), "www") && key.starts_with("homepages/");
         }
         false
     }
@@ -126,23 +128,23 @@ impl Parser {
             eve.try_get_attribute("key")
                 .unwrap()
                 .unwrap()
-                .decode_and_unescape_value(self.reader.decoder())?,
+                .normalized_value(Explicit1_0)?,
         );
         publication.mdate = String::from(
             eve.try_get_attribute("mdate")
                 .unwrap()
                 .unwrap()
-                .decode_and_unescape_value(self.reader.decoder())?,
+                .normalized_value(Explicit1_0)?,
         );
         publication.pubtype = match eve.local_name().as_ref() {
-            b"article" => "article".to_string(),
-            b"inproceedings" => "inproceedings".to_string(),
-            b"proceedings" => "proceedings".to_string(),
-            b"book" => "book".to_string(),
-            b"incollection" => "incollection".to_string(),
-            b"phdthesis" => "phdthesis".to_string(),
-            b"masterthesis" => "masterthesis".to_string(),
-            b"www" => "www".to_string(),
+            "article" => "article".to_string(),
+            "inproceedings" => "inproceedings".to_string(),
+            "proceedings" => "proceedings".to_string(),
+            "book" => "book".to_string(),
+            "incollection" => "incollection".to_string(),
+            "phdthesis" => "phdthesis".to_string(),
+            "masterthesis" => "masterthesis".to_string(),
+            "www" => "www".to_string(),
             _ => "".to_string(),
         };
 
@@ -157,7 +159,7 @@ impl Parser {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) => match e.name().as_ref() {
                     //General
-                    b"author" => {
+                    "author" => {
                         let author = self.read_text(&e)?;
                         let mut person = Person::new();
                         person.add_name(author.as_str());
@@ -166,22 +168,22 @@ impl Parser {
                             publication.authors.push(person);
                         }
                     }
-                    b"title" => {
+                    "title" => {
                         publication.title = self.read_text(&e)?;
                     }
-                    b"year" => {
+                    "year" => {
                         publication.year = Some(self.read_int(&e)?);
                     }
-                    b"month" => {
+                    "month" => {
                         publication.month = Some(self.read_text(&e)?);
                     }
-                    b"pages" => {
+                    "pages" => {
                         publication.pages = Some(self.read_text(&e)?);
                     }
-                    b"note" => {
+                    "note" => {
                         let attr = e.try_get_attribute("type");
                         if let Some(attr) = attr.unwrap() {
-                            let value = attr.decode_and_unescape_value(self.reader.decoder())?;
+                            let value = attr.normalized_value(Explicit1_0)?;
                             match value.as_ref() {
                                 "isbn" => {
                                     // Notes with type isbn are saved as isbn
@@ -198,35 +200,35 @@ impl Parser {
                                 .push((String::from("note"), self.read_text(&e)?));
                         }
                     }
-                    b"number" => {
+                    "number" => {
                         publication.number = Some(self.read_text(&e)?);
                     }
-                    b"volume" => {
+                    "volume" => {
                         publication.volume = Some(self.read_text(&e)?);
                     }
                     // Article
-                    b"journal" => {
+                    "journal" => {
                         publication.journal = Some(self.read_text(&e)?);
                     }
                     // Proceedings
-                    b"publisher" => {
+                    "publisher" => {
                         publication.publisher = Some(self.read_text(&e)?);
                     }
-                    b"editor" => {
+                    "editor" => {
                         publication.editor.push(self.read_text(&e)?);
                     }
-                    b"booktitle" => {
+                    "booktitle" => {
                         publication.book_title = Some(self.read_text(&e)?);
                     } // Also in inproceedings and incollection
                     // Thesis
-                    b"school" => {
+                    "school" => {
                         publication.school = Some(self.read_text(&e)?);
                     }
                     // Other
-                    b"isbn" => {
+                    "isbn" => {
                         publication.isbn = Some(self.read_text(&e)?);
                     }
-                    b"cite" | b"crossref" => {
+                    "cite" | "crossref" => {
                         let text = self.read_text(&e)?;
                         if !text.contains("homepages/") && re_pubkey.is_match(&text) {
                             // Filter out homepage references and not proper refrences
@@ -239,19 +241,15 @@ impl Parser {
                                 }
                             };
 
-                            let reference = (
-                                String::from_utf8_lossy(e.name().as_ref()).into_owned(),
-                                ref_id,
-                            );
+                            let reference = (String::from_str(e.name().as_ref())?, ref_id);
                             if !publication.references.contains(&reference) {
                                 publication.references.push(reference);
                             }
                         }
                     }
-                    b"url" | b"ee" | b"series" | b"stream" => publication.resources.push((
-                        String::from_utf8_lossy(e.name().as_ref()).into_owned(),
-                        self.read_text(&e)?,
-                    )),
+                    "url" | "ee" | "series" | "stream" => publication
+                        .resources
+                        .push((String::from_str(e.name().as_ref())?, self.read_text(&e)?)),
                     _ => {
                         self.reader
                             .read_to_end_into(e.to_end().name(), &mut Vec::new())
@@ -438,14 +436,14 @@ impl Parser {
             eve.try_get_attribute("mdate")
                 .unwrap()
                 .unwrap()
-                .decode_and_unescape_value(self.reader.decoder())?,
+                .normalized_value(Explicit1_0)?,
         );
         loop {
             // Iterate until tag closes
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) => match e.name().as_ref() {
                     // Add names and aliases
-                    b"author" => {
+                    "author" => {
                         let author = self.read_text(&e)?;
                         if person.name == String::new() {
                             person.add_name(author.as_str());
@@ -453,24 +451,24 @@ impl Parser {
                             person.alias.push(read_person_name(&author));
                         }
                     }
-                    b"note" => {
+                    "note" => {
                         // Affiliations
                         let attr = e
                             .try_get_attribute("type")
                             .unwrap()
                             .unwrap_or(Attribute::from(("type", "ERROR")))
-                            .decode_and_unescape_value(self.reader.decoder())?;
+                            .normalized_value(Explicit1_0)?;
                         if attr == "affiliation" {
                             let state = String::from(
                                 e.try_get_attribute("label")
                                     .unwrap()
                                     .unwrap_or(Attribute::from(("label", "current")))
-                                    .decode_and_unescape_value(self.reader.decoder())?,
+                                    .normalized_value(Explicit1_0)?,
                             );
                             person.affiliations.push((String::from(attr), state));
                         }
                     }
-                    b"url" => {
+                    "url" => {
                         // Homepages
                         let url = self.read_text(&e)?;
                         person.urls.push(url);
@@ -481,7 +479,7 @@ impl Parser {
                             .unwrap();
                     } // Skip unknown tags
                 },
-                Ok(Event::End(e)) if e.name().as_ref() == b"www" => break, // End of Tag
+                Ok(Event::End(e)) if e.name().as_ref() == "www" => break, // End of Tag
                 Ok(Event::Eof) => return Err("Unexpected EOF".into()),
                 _ => (),
             }
@@ -556,29 +554,21 @@ impl Parser {
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Text(e)) => {
                     // Read direct Text
-                    text += e.unescape()?.into_owned().as_str();
+                    text += &e;
                 }
                 Ok(Event::Start(e)) => match e.name().as_ref() {
                     // Skip over formatting tags
-                    b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {}
+                    "i" | "ref" | "sup" | "sub" | "tt" => {}
                     _ => {
-                        return Err(format!(
-                            "Unexpected event start {0}",
-                            String::from_utf8_lossy(e.name().as_ref())
-                        )
-                        .into());
+                        return Err(format!("Unexpected event start {0}", e.name().as_ref()).into());
                     }
                 },
                 Ok(Event::End(e)) if e.name().as_ref() == start.name().as_ref() => break, // End loop after end of tag
                 Ok(Event::End(e)) => match e.name().as_ref() {
                     // Skip over formatting tags
-                    b"i" | b"ref" | b"sup" | b"sub" | b"tt" => {}
+                    "i" | "ref" | "sup" | "sub" | "tt" => {}
                     _ => {
-                        return Err(format!(
-                            "Unexpected end event {0}",
-                            String::from_utf8_lossy(e.name().as_ref())
-                        )
-                        .into());
+                        return Err(format!("Unexpected end event {0}", e.name().as_ref()).into());
                     }
                 },
                 Ok(Event::Empty(_)) => {} // Skip empty formatting tags
@@ -597,8 +587,7 @@ impl Parser {
 
     /// Read the text of a tag as Integer
     fn read_int(&mut self, start: &BytesStart) -> Result<usize, Box<dyn Error>> {
-        let value = self.read_text(start)?
-            .parse::<usize>()?;
+        let value = self.read_text(start)?.parse::<usize>()?;
         Ok(value)
     }
 }
