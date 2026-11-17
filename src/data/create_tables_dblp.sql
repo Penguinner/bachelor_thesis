@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS Editors(
 
 CREATE TABLE IF NOT EXISTS Authors(
     key INTEGER PRIMARY KEY,
-    name VARCHAR(255) NOT NUll,
     id INTEGER NOT NULL,
+    name VARCHAR(255) NOT NUll,
     mdate DATE,
     UNIQUE(name, id)
 );
