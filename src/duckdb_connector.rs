@@ -46,7 +46,6 @@ impl DuckDBConnection {
     /// Flushes the statement cache to ensure cold queries
     pub fn cooldown(&mut self) -> () {
         self.connection.flush_prepared_statement_cache();
-        self.activate_profiling()
     }
 
     /// Activates DuckDBs profiling to time queries
@@ -120,6 +119,7 @@ impl DuckDBConnection {
 
     /// Runs a test query on duckdb database
     pub fn run_test_query(&self, query: &str) -> Result<u128, Box<dyn Error>> {
+        self.activate_profiling();
         // Execute the query
         let mut stmt: Statement<'_> = self.connection.prepare(query)?;
         let response: Result<Rows<'_>, duckdb::Error> = stmt.query(params![]);

@@ -622,6 +622,7 @@ fn run_test(
 
     if hotrun {
         // Warm up the database
+        trace!("Starting warmup");
         for _ in 0..5 {
             for record in queries.iter() {
                 let _ = connection.run_test_query(record);
@@ -637,6 +638,7 @@ fn run_test(
                 connection.cooldown();
                 clear_cache().unwrap();
             }
+            trace!("Running query {id} iteration: {iter}");
             let result = connection.run_test_query(record);
             match result {
                 Ok(time) => {
