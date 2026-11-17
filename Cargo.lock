@@ -346,6 +346,7 @@ dependencies = [
  "ftail",
  "futures",
  "glob",
+ "html-escape",
  "injectorpp",
  "itertools",
  "log",
@@ -1086,6 +1087,12 @@ checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest",
 ]
+
+[[package]]
+name = "html-escape"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d45ed4d99334da2a2f221504e8ffc8ad09baf2a452b154465a976bfde697b004"
 
 [[package]]
 name = "http"

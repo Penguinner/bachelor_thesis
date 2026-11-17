@@ -556,6 +556,15 @@ impl Parser {
                     // Read direct Text
                     text += &e;
                 }
+                Ok(Event::GeneralRef(e)) => {
+                    if let Some(ch) = e.resolve_char_ref()? {
+                        text.push(ch);
+                    } else {
+                        let ref_text = format!("&{};", e.into_inner().into_owned());
+                        let decoded = html_escape::decode_html_entities(&ref_text);
+                        text.push_str(&decoded);
+                    }
+                }
                 Ok(Event::Start(e)) => match e.name().as_ref() {
                     // Skip over formatting tags
                     "i" | "ref" | "sup" | "sub" | "tt" => {}
