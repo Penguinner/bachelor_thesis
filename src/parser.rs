@@ -495,7 +495,7 @@ impl Parser {
     fn write_person(&mut self, person: Person) {
         let person_tup = (person.name.clone(), person.id);
         let auth_id: usize;
-        if !self.author_map.contains_key(&person_tup) {
+        if self.author_map.contains_key(&person_tup) {
             auth_id = *self.author_map.get(&person_tup).unwrap()
         } else {
             auth_id = self.next_author_id;

@@ -336,13 +336,13 @@ impl Dataset {
         match self {
             // Download and Parse dblp data for sql use
             Dataset::Dblp if !exists("/extern/data/dblp.xml").unwrap() => {
-                trace!("Parsing DBLP data");
                 let rt = Runtime::new().unwrap();
                 let handle = rt.handle();
 
                 handle
                     .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
                     .unwrap();
+                trace!("Parsing DBLP data");
                 let mut parser = Parser::new("/extern/data/dblp.xml");
                 parser.run();
                 trace!("Finished Parsing DBLP data");
@@ -722,7 +722,7 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
 
     let client = reqwest::Client::new();
     const MAX_RETRIES: u32 = 10;
-
+    trace!("Starting DBLP xml download");
     for attempt in 0..=MAX_RETRIES {
         match download_attempt(&client, url, &filename).await {
             Ok(()) => return Ok(()),
