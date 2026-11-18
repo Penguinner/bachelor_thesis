@@ -497,18 +497,18 @@ impl Parser {
         let auth_id: usize;
         if self.author_map.contains_key(&person_tup) {
             auth_id = *self.author_map.get(&person_tup).unwrap()
-        } else {
+        } else { // Author doesn't exist already
             auth_id = self.next_author_id;
             self.author_map.insert(person_tup, auth_id);
             self.next_author_id += 1;
-        }
-        // Author
-        self.writer.write_author(AuthorStore {
+            
+            self.writer.write_author(AuthorStore {
             key: auth_id,
             name: person.name.clone(),
             id: person.id,
             mdate: person.mdate.clone(),
         });
+        }
         // Websites
         for website in person.urls.iter() {
             self.writer.write_author_website(AuthorWebsiteStore {
