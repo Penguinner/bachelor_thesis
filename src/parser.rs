@@ -493,14 +493,18 @@ impl Parser {
 
     /// Write person to csv file
     fn write_person(&mut self, person: Person) {
-        self.author_map
-            .insert((person.name.clone(), person.id), self.next_author_id);
+        let person_tup = (person.name.clone(), person.id);
+        let auth_id: usize;
+        if !self.author_map.contains_key(&person_tup) {
+            auth_id = *self.author_map.get(&person_tup).unwrap()
+        } else {
+            auth_id = self.next_author_id;
+            self.author_map.insert(person_tup, auth_id);
+            self.next_author_id += 1;
+        }
         // Author
         self.writer.write_author(AuthorStore {
-            key: *self
-                .author_map
-                .get(&(person.name.clone(), person.id))
-                .unwrap(),
+            key: auth_id,
             name: person.name.clone(),
             id: person.id,
             mdate: person.mdate.clone(),
@@ -509,10 +513,7 @@ impl Parser {
         for website in person.urls.iter() {
             self.writer.write_author_website(AuthorWebsiteStore {
                 id: self.next_author_website_id,
-                author_id: *self
-                    .author_map
-                    .get(&(person.name.clone(), person.id))
-                    .unwrap(),
+                author_id: auth_id,
                 url: website.clone(),
             });
             self.next_author_website_id += 1;
@@ -521,10 +522,7 @@ impl Parser {
         for affiliation in person.affiliations.iter() {
             self.writer.write_affiliation(AffiliationsStore {
                 id: self.next_affiliation_id,
-                author_id: *self
-                    .author_map
-                    .get(&(person.name.clone(), person.id))
-                    .unwrap(),
+                author_id: auth_id,
                 affiliation: affiliation.0.clone(),
                 afftype: affiliation.1.clone(),
             });
@@ -532,17 +530,15 @@ impl Parser {
         }
         // Alias
         for alias in person.alias.iter() {
-            self.author_map
-                .insert((alias.0.clone(), alias.1), self.next_author_id);
+            self.author_map.insert((alias.0.clone(), alias.1), auth_id);
             self.writer.write_aliases(AliasStore {
                 id: self.next_alias_id,
-                author_id: self.next_author_id,
+                author_id: auth_id,
                 alias: alias.0.clone(),
                 alias_id: alias.1,
             });
             self.next_alias_id += 1;
         }
-        self.next_author_id += 1;
     }
 
     /// Read the text of a tag
