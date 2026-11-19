@@ -91,7 +91,7 @@ impl DuckDBConnection {
              COPY Publications FROM '{4}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
              COPY Resources FROM '{5}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
              COPY PublicationEditors FROM '{6}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
-             COPY Reference FROM '{7}' (FORMAT CSV, DELIMITER executeE'\\t', HEADER true);\n\
+             COPY Reference FROM '{7}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
              COPY PublicationAuthors FROM '{8}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
              COPY AuthorWebsites FROM '{9}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
              COPY Affiliations FROM '{10}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
