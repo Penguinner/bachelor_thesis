@@ -117,9 +117,8 @@ impl DuckDBConnection {
     /// Runs a test query on duckdb database
     pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Execute the query
-        let mut stmt: Statement<'_> = self.connection.prepare(query)?;
         self.activate_profiling();
-        let response: Result<Rows<'_>, duckdb::Error> = stmt.query(params![]);
+        let response = self.connection.execute(query, []);
         // Write query result info to log
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(_) => {
@@ -128,14 +127,14 @@ impl DuckDBConnection {
                     .connection
                     .get_profiling_info()
                     .expect("profiling should be enabled");
+                let rows = &profiling.metrics["ROWS_RETURNED"];
                 let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
                 let duration = (duration_secs * 1000.0).round() as u128;
                 info!(
-                    "Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}",
+                    "Query: {0}\nDuration: {1}\nResult Size: Rows {2}",
                     query,
                     duration,
-                    stmt.column_count(),
-                    stmt.row_count()
+                    rows
                 );
                 Ok(duration)
             }
