@@ -49,7 +49,7 @@ impl DuckDBConnection {
     }
 
     /// Activates DuckDBs profiling to time queries
-    fn activate_profiling(&mut self) {
+    fn activate_profiling(&self) {
         trace!("Enabling Profiling");
         self.connection
             .execute("PRAGMA enable_profiling = 'no_output'", [])
@@ -116,9 +116,9 @@ impl DuckDBConnection {
 
     /// Runs a test query on duckdb database
     pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
-        self.activate_profiling();
         // Execute the query
         let mut stmt: Statement<'_> = self.connection.prepare(query)?;
+        self.activate_profiling();
         let response: Result<Rows<'_>, duckdb::Error> = stmt.query(params![]);
         // Write query result info to log
         let result: Result<u128, Box<dyn Error>> = match response {
