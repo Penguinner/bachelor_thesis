@@ -120,16 +120,16 @@ impl DuckDBConnection {
         // Execute the query
         let mut stmt: Statement<'_> = self.connection.prepare(query)?;
         let response: Result<Rows<'_>, duckdb::Error> = stmt.query(params![]);
-        // Get timing info from profiling
-        let profiling = self
-            .connection
-            .get_profiling_info()
-            .expect("profiling should be enabled");
-        let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
-        let duration = (duration_secs * 1000.0).round() as u128;
         // Write query result info to log
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(_) => {
+                // Get timing info from profiling
+                let profiling = self
+                    .connection
+                    .get_profiling_info()
+                    .expect("profiling should be enabled");
+                let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
+                let duration = (duration_secs * 1000.0).round() as u128;
                 info!(
                     "Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}",
                     query,
