@@ -96,7 +96,7 @@ impl DuckDBConnection {
              COPY AuthorWebsites FROM '{9}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
              COPY Affiliations FROM '{10}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
              COPY Alias FROM '{11}' (FORMAT CSV, DELIMITER E'\\t', HEADER true);\n\
-             END;",
+             COMMIT;",
             VENUE_FILE,
             PUBLISHER_FILE,
             EDITOR_FILE,
