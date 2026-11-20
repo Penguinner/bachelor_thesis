@@ -3,10 +3,12 @@ use crate::{
     PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE,
     REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE,
 };
+use duckdb::profiling::ProfilingInfo;
 use duckdb::{Connection, Rows, Statement, params};
 use log::{info, trace};
 use std::error::Error;
-use std::fs;
+use std::ops::Mul;
+use std::{fs, unreachable};
 use std::fs::File;
 use std::io::Read;
 
@@ -52,8 +54,23 @@ impl DuckDBConnection {
     fn activate_profiling(&self) {
         trace!("Enabling Profiling");
         self.connection
-            .execute("PRAGMA enable_profiling = 'no_output'", [])
+            .execute("CALL enable_profiling(format:='no_output', coverage:='all', metrics:=['query.total_time']);", [])
             .unwrap();
+    }
+
+    /// Reads the query duration from the profiling
+    fn read_duration_from_profiling(&self) -> Result<u128, Box<dyn Error>> {
+        match self.connection.get_profiling_info() {
+            Some(infos) => {
+                let duration = infos.children.get(0).unwrap()
+                    .metrics.get("total_time").unwrap()
+                    .parse::<f64>().unwrap()
+                    .mul(1000.0)
+                    .round();
+                Ok(duration as u128)
+            },
+            None => return Err("No profiling stats could be read. Check if profiling is enabled".into())
+        }
     }
 
     /// Installs and loads the DuckDB spatial module to work with spatial data
@@ -118,23 +135,22 @@ impl DuckDBConnection {
     pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
         // Execute the query
         self.activate_profiling();
-        let response = self.connection.execute(query, []);
+        let mut stmt = self.connection.prepare(query).unwrap();
+        let response = stmt.query([]);
         // Write query result info to log
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(_) => {
+                
                 // Get timing info from profiling
-                let profiling = self
-                    .connection
-                    .get_profiling_info()
-                    .expect("profiling should be enabled");
-                let rows = &profiling.metrics["ROWS_RETURNED"];
-                let duration_secs = profiling.metrics["LATENCY"].parse::<f64>().unwrap();
-                let duration = (duration_secs * 1000.0).round() as u128;
+                let duration = self.read_duration_from_profiling().unwrap();
+                let rows = stmt.row_count();
+                let columns = stmt.column_count();
                 info!(
-                    "Query: {0}\nDuration: {1}\nResult Size: Rows {2}",
+                    "Query: {0}\nDuration: {1}\nResult Size: Rows {2} Columns {3}",
                     query,
                     duration,
-                    rows
+                    rows,
+                    columns,
                 );
                 Ok(duration)
             }
@@ -152,5 +168,171 @@ impl DuckDBConnection {
         fs::remove_file("db.duckdb").unwrap();
         self.connection.close().expect("connection close failed");
         Ok(())
+    }
+}
+
+
+fn get_rows_returned(info: &ProfilingInfo) -> u128 {
+    if !matches!(info.metrics["type"].as_str(), "RESULT_COLLECTOR" | "EXECUTE") {
+        return info.metrics["intermediate_rows"].parse::<u128>().unwrap();
+    } else {
+        let child = &info.children[0];
+        return get_rows_returned(child)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_db() -> DuckDBConnection {
+        let conn = DuckDBConnection {
+            connection : Connection::open_in_memory().unwrap(),
+        };
+
+        conn.connection
+            .execute_batch(
+                r#"
+                BEGIN;
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    email VARCHAR UNIQUE,
+                );
+
+                CREATE TABLE products (
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    price DECIMAL(10, 2) NOT NULL,
+                    stock INTEGER NOT NULL DEFAULT 0,
+                );
+
+                CREATE TABLE orders (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    product_id INTEGER NOT NULL REFERENCES products(id),
+                    quantity INTEGER NOT NULL CHECK (quantity > 0)
+                );
+                COMMIT;
+                "#
+            ).unwrap();
+        
+        conn.connection
+            .execute_batch(
+                r#"
+                INSERT INTO users (id, name, email) VALUES
+                    (1, 'Alice',   'alice@example.com'),
+                    (2, 'Bob',     'bob@example.com'),
+                    (3, 'Carol',   'carol@example.com'),
+                    (4, 'Dave',    NULL);
+
+                INSERT INTO products (id, name, price, stock) VALUES
+                    (1, 'Widget',     9.99,  100),
+                    (2, 'Gadget',    19.99,   50),
+                    (3, 'Doohickey',  4.50,  200),
+                    (4, 'Gizmo',      0.00,    0);
+
+                INSERT INTO orders (id, user_id, product_id, quantity) VALUES
+                    (1, 1, 1, 2),
+                    (2, 1, 2, 1),
+                    (3, 2, 3, 5),
+                    (4, 3, 1, 1),
+                    (5, 3, 3, 10);
+                "#,
+            )
+            .unwrap();
+
+        conn
+    }
+
+    #[test]
+    fn test_profiling_simple() {
+        let conn = setup_test_db();
+        conn.activate_profiling();
+
+        conn.connection.execute("SELECT 42", []).unwrap();
+        let _ = conn.read_duration_from_profiling().unwrap();
+    }
+
+    #[test]
+    fn test_profiling_normal() {
+        let conn = setup_test_db();
+        conn.activate_profiling();
+
+        conn.connection.execute("SELECT * AS count FROM orders", []).unwrap();
+        let _ = conn.read_duration_from_profiling().unwrap();
+    }
+
+    #[test]
+    fn test_profiling_eager_aggregate() {
+        let conn = setup_test_db();
+        conn.activate_profiling();
+
+        conn.connection.execute("SELECT COUNT(*) AS count FROM orders", []).unwrap();
+        let _ = conn.read_duration_from_profiling().unwrap();
+    }
+
+    #[test]
+    fn test_profiling_join() {
+        let conn = setup_test_db();
+        conn.activate_profiling();
+
+        conn.connection.execute(
+            "SELECT u.name, SUM(p.price * o.quantity) AS total
+                FROM orders o
+                JOIN users u ON u.id = o.user_id
+                JOIN products p ON p.id = o.product_id
+                GROUP BY u.name
+                ORDER BY u.name
+            ",
+            []).unwrap();
+        let _ = conn.read_duration_from_profiling().unwrap();
+    }
+
+    #[test]
+    fn test_run_query_simple() {
+        let mut conn = setup_test_db();
+        conn.activate_profiling();
+
+        let result = conn.run_test_query("SELECT 42");
+
+        assert!(result.is_ok())
+    }
+
+    #[test]
+    fn test_run_query_normal() {
+        let mut conn = setup_test_db();
+        conn.activate_profiling();
+
+        let result = conn.run_test_query("SELECT * FROM users");
+
+        assert!(result.is_ok())
+    }
+
+    #[test]
+    fn test_run_query_eager_aggregate() {
+        let mut conn = setup_test_db();
+        conn.activate_profiling();
+
+        let result = conn.run_test_query("SELECT COUNT(*) FROM users");
+
+        assert!(result.is_ok())
+    }
+
+    #[test]
+    fn test_run_query_join() {
+        let mut conn = setup_test_db();
+        conn.activate_profiling();
+
+        let result = conn.run_test_query(
+            "SELECT u.name, SUM(p.price * o.quantity) AS total
+                FROM orders o
+                JOIN users u ON u.id = o.user_id
+                JOIN products p ON p.id = o.product_id
+                GROUP BY u.name
+                ORDER BY u.name
+            ");
+
+        assert!(result.is_ok())
     }
 }
