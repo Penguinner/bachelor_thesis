@@ -3,14 +3,13 @@ use crate::{
     PUBLICATION_AUTHORS_FILE, PUBLICATION_EDITOR_FILE, PUBLICATION_FILE, PUBLISHER_FILE,
     REFERENCE_FILE, RESOURCES_FILE, VENUE_FILE,
 };
-use duckdb::profiling::ProfilingInfo;
-use duckdb::{Connection, Rows, Statement, params};
+use duckdb::Connection;
 use log::{info, trace};
 use std::error::Error;
-use std::ops::Mul;
-use std::{fs, unreachable};
+use std::fs;
 use std::fs::File;
 use std::io::Read;
+use std::ops::Mul;
 
 use crate::Dataset;
 
@@ -62,14 +61,20 @@ impl DuckDBConnection {
     fn read_duration_from_profiling(&self) -> Result<u128, Box<dyn Error>> {
         match self.connection.get_profiling_info() {
             Some(infos) => {
-                let duration = infos.children.get(0).unwrap()
-                    .metrics.get("total_time").unwrap()
-                    .parse::<f64>().unwrap()
+                let duration = infos
+                    .children
+                    .first()
+                    .unwrap()
+                    .metrics
+                    .get("total_time")
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap()
                     .mul(1000.0)
                     .round();
                 Ok(duration as u128)
-            },
-            None => return Err("No profiling stats could be read. Check if profiling is enabled".into())
+            }
+            None => Err("No profiling stats could be read. Check if profiling is enabled".into()),
         }
     }
 
@@ -140,17 +145,13 @@ impl DuckDBConnection {
         // Write query result info to log
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(_) => {
-                
                 // Get timing info from profiling
                 let duration = self.read_duration_from_profiling().unwrap();
                 let rows = stmt.row_count();
                 let columns = stmt.column_count();
                 info!(
                     "Query: {0}\nDuration: {1}\nResult Size: Rows {2} Columns {3}",
-                    query,
-                    duration,
-                    rows,
-                    columns,
+                    query, duration, rows, columns,
                 );
                 Ok(duration)
             }
@@ -171,23 +172,13 @@ impl DuckDBConnection {
     }
 }
 
-
-fn get_rows_returned(info: &ProfilingInfo) -> u128 {
-    if !matches!(info.metrics["type"].as_str(), "RESULT_COLLECTOR" | "EXECUTE") {
-        return info.metrics["intermediate_rows"].parse::<u128>().unwrap();
-    } else {
-        let child = &info.children[0];
-        return get_rows_returned(child)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn setup_test_db() -> DuckDBConnection {
         let conn = DuckDBConnection {
-            connection : Connection::open_in_memory().unwrap(),
+            connection: Connection::open_in_memory().unwrap(),
         };
 
         conn.connection
@@ -214,9 +205,10 @@ mod tests {
                     quantity INTEGER NOT NULL CHECK (quantity > 0)
                 );
                 COMMIT;
-                "#
-            ).unwrap();
-        
+                "#,
+            )
+            .unwrap();
+
         conn.connection
             .execute_batch(
                 r#"
@@ -259,7 +251,9 @@ mod tests {
         let conn = setup_test_db();
         conn.activate_profiling();
 
-        conn.connection.execute("SELECT * AS count FROM orders", []).unwrap();
+        conn.connection
+            .execute("SELECT * AS count FROM orders", [])
+            .unwrap();
         let _ = conn.read_duration_from_profiling().unwrap();
     }
 
@@ -268,7 +262,9 @@ mod tests {
         let conn = setup_test_db();
         conn.activate_profiling();
 
-        conn.connection.execute("SELECT COUNT(*) AS count FROM orders", []).unwrap();
+        conn.connection
+            .execute("SELECT COUNT(*) AS count FROM orders", [])
+            .unwrap();
         let _ = conn.read_duration_from_profiling().unwrap();
     }
 
@@ -277,15 +273,18 @@ mod tests {
         let conn = setup_test_db();
         conn.activate_profiling();
 
-        conn.connection.execute(
-            "SELECT u.name, SUM(p.price * o.quantity) AS total
+        conn.connection
+            .execute(
+                "SELECT u.name, SUM(p.price * o.quantity) AS total
                 FROM orders o
                 JOIN users u ON u.id = o.user_id
                 JOIN products p ON p.id = o.product_id
                 GROUP BY u.name
                 ORDER BY u.name
             ",
-            []).unwrap();
+                [],
+            )
+            .unwrap();
         let _ = conn.read_duration_from_profiling().unwrap();
     }
 
@@ -331,7 +330,26 @@ mod tests {
                 JOIN products p ON p.id = o.product_id
                 GROUP BY u.name
                 ORDER BY u.name
-            ");
+            ",
+        );
+
+        assert!(result.is_ok())
+    }
+
+    #[test]
+    fn test_load_spatial() {
+        let mut conn = DuckDBConnection {
+            connection: Connection::open_in_memory().unwrap(),
+        };
+
+        conn.load_spatial_module();
+
+        let mut stmt = conn
+            .connection
+            .prepare("SELECT * FROM ST_Drivers()")
+            .unwrap();
+
+        let result = stmt.query([]);
 
         assert!(result.is_ok())
     }

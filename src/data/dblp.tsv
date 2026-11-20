@@ -41,7 +41,7 @@ SELECT (SUM(?count_paper) as ?agg) WHERE {
   GROUP BY ?author
   }
 }"
-Concat	SELECT pub.key, string_agg(Authors.name) FROM Publications as pub LEFT JOIN PublicationAuthors as pubauth ON pubauth.publication_key = pub.key LEFT JOIN Authors ON pubauth.author_id = Authors.key GROUP BY pub.key;	SELECT pub.key, string_agg(Authors.name) FROM Publications as pub LEFT JOIN PublicationAuthors as pubauth ON pubauth.publication_key = pub.key LEFT JOIN Authors ON pubauth.author_id = Authors.key GROUP BY pub.key;	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?paper (GROUP_CONCAT(?author_label) as ?labels) WHERE { ?paper dblp:authoredBy ?author . ?author rdfs:label ?author_label . } GROUP BY ?paper"
+Concat	SELECT pub.id, string_agg(Authors.name) FROM Publications as pub LEFT JOIN PublicationAuthors as pubauth ON pubauth.publication_id = pub.id LEFT JOIN Authors ON pubauth.author_id = Authors.key GROUP BY pub.id;	SELECT pub.id, string_agg(Authors.name) FROM Publications as pub LEFT JOIN PublicationAuthors as pubauth ON pubauth.publication_id = pub.id LEFT JOIN Authors ON pubauth.author_id = Authors.key GROUP BY pub.id;	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?paper (GROUP_CONCAT(?author_label) as ?labels) WHERE { ?paper dblp:authoredBy ?author . ?author rdfs:label ?author_label . } GROUP BY ?paper"
 Contains/ Like	"SELECT COUNT(*) FROM Publications WHERE title LIKE ""%Database%"";"	"SELECT COUNT(*) FROM Publications WHERE title LIKE ""%Database%"";"	"PREFIX dblp: <https://dblp.org/rdf/schema#>
 SELECT (COUNT(*) as ?count) WHERE {
   ?paper dblp:title ?title .
@@ -49,7 +49,7 @@ SELECT (COUNT(*) as ?count) WHERE {
 } 
 
 "
-Order By	SELECT year, key FROM Publications ORDER BY year;	SELECT year, key FROM Publications ORDER BY year;	"PREFIX dblp: <https://dblp.org/rdf/schema#>
+Order By	SELECT year, id FROM Publications ORDER BY year;	SELECT year, key FROM Publications ORDER BY year;	"PREFIX dblp: <https://dblp.org/rdf/schema#>
 SELECT ?year ?paper WHERE {
 ?paper dblp:yearOfPublication ?year .
 }
@@ -66,14 +66,14 @@ SELECT (COUNT(*) as ?count) WHERE {
 } 
 
 "
-Materialize Small	SELECT key FROM Publications LIMIT 1000;	SELECT key FROM Publications LIMIT 1000;	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+Materialize Small	SELECT id FROM Publications LIMIT 1000;	SELECT id FROM Publications LIMIT 1000;	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX dblp: <https://dblp.org/rdf/schema#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 SELECT * WHERE {
   ?paper rdf:type dblp:Publication .
 }
 LIMIT 1000"
-Materialize Large	SELECT key FROM Publications;	SELECT key FROM Publications;	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+Materialize Large	SELECT id FROM Publications;	SELECT id FROM Publications;	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX dblp: <https://dblp.org/rdf/schema#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 SELECT * WHERE {
@@ -81,7 +81,7 @@ SELECT * WHERE {
 }
 
 "
-Union Small	SELECT key FROM Publications WHERE type = 'book' UNION SELECT key FROM Publications WHERE type = 'incollection';	SELECT key FROM Publications WHERE type = 'book' UNION SELECT key FROM Publications WHERE type = 'incollection';	"PREFIX bibtex: <http://purl.org/net/nknouf/ns/bibtex#>
+Union Small	SELECT id FROM Publications WHERE type = 'book' UNION SELECT id FROM Publications WHERE type = 'incollection';	SELECT id FROM Publications WHERE type = 'book' UNION SELECT id FROM Publications WHERE type = 'incollection';	"PREFIX bibtex: <http://purl.org/net/nknouf/ns/bibtex#>
 PREFIX dblp: <https://dblp.org/rdf/schema#>
 SELECT ?paper WHERE {
   {
@@ -92,7 +92,7 @@ SELECT ?paper WHERE {
     ?paper dblp:bibtexType bibtex:Incollection .
   }
 }"
-Union Large	SELECT key FROM Publications WHERE type = 'article' UNION SELECT key FROM Publications WHERE type = 'inproceedings';	SELECT key FROM Publications WHERE type = 'article' UNION SELECT key FROM Publications WHERE type = 'inproceedings';	"PREFIX bibtex: <http://purl.org/net/nknouf/ns/bibtex#>
+Union Large	SELECT id FROM Publications WHERE type = 'article' UNION SELECT id FROM Publications WHERE type = 'inproceedings';	SELECT id FROM Publications WHERE type = 'article' UNION SELECT id FROM Publications WHERE type = 'inproceedings';	"PREFIX bibtex: <http://purl.org/net/nknouf/ns/bibtex#>
 PREFIX dblp: <https://dblp.org/rdf/schema#>
 SELECT ?paper WHERE {
   {
@@ -104,10 +104,10 @@ SELECT ?paper WHERE {
     
   }
 }"
-Minus Small	SELECT key FROM Publications EXCEPT SELECT key FROM Publications WHERE year >= 2000;	SELECT key FROM Publications EXCEPT SELECT key FROM Publications WHERE year >= 2000;	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+Minus Small	SELECT id FROM Publications EXCEPT SELECT id FROM Publications WHERE year >= 2000;	SELECT id FROM Publications EXCEPT SELECT id FROM Publications WHERE year >= 2000;	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 PREFIX dblp: <https://dblp.org/rdf/schema#>
-SELECT (COUNT(*) as ?count) WHERE {
+SELECT ?paper WHERE {
   {
     ?paper rdf:type dblp:Publication .
   }
@@ -116,10 +116,10 @@ SELECT (COUNT(*) as ?count) WHERE {
     FILTER (?year >= ""2000""^^xsd:gYear)
   }
 }"
-Minus Large	"SELECT key FROM Publications EXCEPT SELECT key FROM Publications WHERE year <= 2000;"	SELECT key FROM Publications EXCEPT SELECT key FROM Publications WHERE year <= 2000;	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+Minus Large	"SELECT id FROM Publications EXCEPT SELECT id FROM Publications WHERE year <= 2000;"	SELECT id FROM Publications EXCEPT SELECT id FROM Publications WHERE year <= 2000;	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 PREFIX dblp: <https://dblp.org/rdf/schema#>
-SELECT (COUNT(*) as ?count) WHERE {
+SELECT ?paper WHERE {
   {
     ?paper rdf:type dblp:Publication .
   }
@@ -141,7 +141,7 @@ SELECT (COUNT(*) as ?count) WHERE {
 Optional / Left Join Large	SELECT COUNT(*) FROM Authors LEFT JOIN Affiliations ON Authors.id = Affiliations.author_id;	SELECT COUNT(*) FROM Authors LEFT JOIN Affiliations ON Authors.id = Affiliations.author_id	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 PREFIX dblp: <https://dblp.org/rdf/schema#>
-SELECT * WHERE {
+SELECT (Count(*) as ?count) WHERE {
   {
     ?author rdf:type dblp:Person .
   }
