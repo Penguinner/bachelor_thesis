@@ -15,8 +15,9 @@ use postgres::{Client, NoTls};
 use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{self, File, read_dir};
 use std::io::{BufRead, BufReader, Read, Seek, Write};
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 use std::sync::OnceLock;
 use std::thread::sleep;
@@ -75,7 +76,12 @@ impl PostgresConnection {
             );
 
             // Create Container
-            let log_path = format!("/extern/data/{}", dataset.name());
+            let log_path = format!("/extern/data/{}-postgres", dataset.name());
+
+            // Initialize log directory and set permissions so the postgres container can write to it
+            fs::create_dir(log_path.as_str()).unwrap();
+            fs::set_permissions(log_path.as_str(), fs::Permissions::from_mode(0o777)).unwrap();
+
             let config = ContainerCreateBody {
                 image: Some(image.into()),
                 env: Some(vec![
@@ -96,7 +102,7 @@ impl PostgresConnection {
                 ]),
                 host_config: Some(HostConfig {
                     binds: Some(vec![format!(
-                        "/extern/data/{}:{}",
+                        "/extern/data/{}-postgres:{}",
                         dataset.name(),
                         log_path
                     )]),
@@ -132,7 +138,7 @@ impl PostgresConnection {
         let mut conn = PostgresConnection {
             client,
             docker_id: id,
-            log_path: format!("/extern/data/{}/postgresql.log", dataset.name()),
+            log_path: format!("/extern/data/{}-postgres/postgresql.log", dataset.name()),
             log_stream: None,
             log_pending: String::new(),
         };
