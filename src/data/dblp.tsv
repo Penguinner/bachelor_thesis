@@ -161,7 +161,7 @@ strafter	SELECT SUM(length(regexp_substr(title, '[^a]*a(.*)'))) FROM Publication
 SELECT (SUM(STRLEN(STRAFTER(?title, ""a""))) AS ?length)  WHERE {
     ?paper dblp:title ?title .
 }"
-strstarts	"SELECT SUM(starts_with(title, ""a"")) FROM Publications;"	SELECT SUM(starts_with(title)) FROM Publications;	"PREFIX dblp: <https://dblp.org/rdf/schema#>
+strstarts	"SELECT SUM(starts_with(title, ""a"")) FROM Publications;"	"SELECT SUM(starts_with(title, ""a"")) FROM Publications;"	"PREFIX dblp: <https://dblp.org/rdf/schema#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 SELECT (SUM(xsd:integer(STRSTARTS(?title, ""a""))) AS ?count)  WHERE {
     ?paper dblp:title ?title .
