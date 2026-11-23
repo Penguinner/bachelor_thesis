@@ -10,12 +10,12 @@ use bollard::query_parameters::{
     RestartContainerOptions,
 };
 use futures::TryStreamExt;
-use log::{info, trace};
+use log::{debug, info, trace};
 use postgres::{Client, NoTls};
 use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{self, File};
+use std::fs::{self, File, remove_dir_all};
 use std::io::{BufRead, BufReader, Read, Seek, Write};
 use std::os::unix::fs::chown;
 use std::process::Command;
@@ -79,7 +79,14 @@ impl PostgresConnection {
             let log_path = format!("/extern/data/{}-postgres", dataset.name());
 
             // Initialize log directory and set permissions so the postgres container can write to it
-            fs::create_dir(log_path.as_str()).unwrap();
+            match fs::create_dir(log_path.as_str()) {
+                Err(e) => {
+                    debug!("{}", e);
+                    remove_dir_all(log_path.as_str()).unwrap();
+                    fs::create_dir(log_path.as_str()).unwrap();
+                },
+                _ => {}
+            }
             chown(log_path.as_str(), Some(999), Some(999)).unwrap();
 
             let config = ContainerCreateBody {
