@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File, read_dir};
 use std::io::{BufRead, BufReader, Read, Seek, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{PermissionsExt, chown};
 use std::process::Command;
 use std::sync::OnceLock;
 use std::thread::sleep;
@@ -80,7 +80,7 @@ impl PostgresConnection {
 
             // Initialize log directory and set permissions so the postgres container can write to it
             fs::create_dir(log_path.as_str()).unwrap();
-            fs::set_permissions(log_path.as_str(), fs::Permissions::from_mode(0o777)).unwrap();
+            chown(log_path.as_str(), Some(999), Some(999)).unwrap();
 
             let config = ContainerCreateBody {
                 image: Some(image.into()),
