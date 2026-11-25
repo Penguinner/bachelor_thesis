@@ -6,32 +6,30 @@ use crate::{
 use bollard::Docker;
 use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
 use bollard::query_parameters::{
-    CreateContainerOptionsBuilder, PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions,
-    RestartContainerOptions,
+    CreateContainerOptionsBuilder, LogsOptionsBuilder, PruneBuildOptions, PruneImagesOptions, RestartContainerOptions,
 };
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use log::{debug, info, trace};
 use postgres::{Client, NoTls};
 use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{self, File, remove_dir_all};
-use std::io::{BufRead, BufReader, Read, Seek, Write};
-use std::os::unix::fs::chown;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::process::Command;
 use std::sync::OnceLock;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use std::{format, vec};
+use std::{eprintln, format, vec};
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
 
 /// Connection for PostgreSQL Database
 pub struct PostgresConnection {
     client: Client,
     docker_id: String,
-    log_path: String,
-    log_stream: Option<BufReader<File>>,
-    log_pending: String,
+    rt: Runtime,
+    log_rx: mpsc::Receiver<String>,
 }
 
 impl PostgresConnection {
@@ -76,19 +74,6 @@ impl PostgresConnection {
             );
 
             // Create Container
-            let log_path = format!("/extern/data/{}-postgres", dataset.name());
-
-            // Initialize log directory and set permissions so the postgres container can write to it
-            match fs::create_dir(log_path.as_str()) {
-                Err(e) => {
-                    debug!("{}", e);
-                    remove_dir_all(log_path.as_str()).unwrap();
-                    fs::create_dir(log_path.as_str()).unwrap();
-                },
-                _ => {}
-            }
-            chown(log_path.as_str(), Some(999), Some(999)).unwrap();
-
             let config = ContainerCreateBody {
                 image: Some(image.into()),
                 env: Some(vec![
@@ -102,17 +87,8 @@ impl PostgresConnection {
                     "logging_collector=on".to_string(),
                     "-c".to_string(),
                     "log_duration=on".to_string(),
-                    "-c".to_string(),
-                    format!("log_directory={}", log_path).to_string(),
-                    "-c".to_string(),
-                    "log_filename=postgresql.log".to_string(),
                 ]),
                 host_config: Some(HostConfig {
-                    binds: Some(vec![format!(
-                        "/extern/data/{}-postgres:{}",
-                        dataset.name(),
-                        log_path
-                    )]),
                     port_bindings: Some(port_bindings),
                     ..Default::default()
                 }),
@@ -139,15 +115,48 @@ impl PostgresConnection {
                 .expect("Failed to start Docker Container");
             id
         });
+        // Create log reader
+        let (tx, log_rx) = mpsc::channel::<String>(256);
+        {
+            let container = id.clone();
+            rt.spawn(async move {
+                let docker = Docker::connect_with_defaults().unwrap();
+                let options = Some(
+                    LogsOptionsBuilder::new().stdout(true)
+                        .follow(true)
+                        .tail("0")
+                        .stderr(true)
+                        .build()
+                );
+
+                let mut stream = docker.logs(&container, options);
+                let mut buf = String::new();
+                while let Some(item) = stream.next().await {
+                    match item {
+                        Ok(out) => {
+                            buf.push_str(&out.to_string());
+                            while let Some(nl) = buf.find('\n') {
+                                let line: String = buf.drain(..=nl).collect();
+                                if tx.send(line).await.is_err() { return; }
+                            }
+                        },
+                        Err(e) => {
+                            debug!("log stream error: {e}");
+                            eprintln!("log stream error: {e}")
+                        }
+                    }
+                }
+            });
+        }
+
 
         // Connect to Postgres DB
         let client = create_client();
         let mut conn = PostgresConnection {
             client,
             docker_id: id,
-            log_path: format!("/extern/data/{}-postgres/postgresql.log", dataset.name()),
-            log_stream: None,
-            log_pending: String::new(),
+            rt,
+            log_rx,
         };
         // Additional initialization depending on dataset
         match dataset {
@@ -160,31 +169,19 @@ impl PostgresConnection {
                 conn.insert_osm_data();
             }
         }
-        conn.open_log_stream()?;
         trace!("Finished creating Postgres client");
         Ok(conn)
     }
 
-    fn open_log_stream(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut file = File::open(&self.log_path)?;
-        file.seek(std::io::SeekFrom::End(0))?;
-        self.log_stream = Some(BufReader::new(file));
-        self.log_pending.clear();
-        Ok(())
-    }
-
     /// Restart Docker container to ensure cold running condition
     pub fn cooldown(&mut self) {
-        let rt = Runtime::new().unwrap();
-        let handle = rt.handle();
-        handle
-            .block_on(async {
-                let docker = Docker::connect_with_defaults().unwrap();
-                docker
-                    .restart_container("postgres", Some(RestartContainerOptions::default()))
-                    .await
-            })
-            .unwrap();
+        self.rt.block_on(async {
+            let docker = Docker::connect_with_defaults().unwrap();
+            docker
+                .restart_container(&self.docker_id, Some(RestartContainerOptions::default()))
+                .await
+        })
+        .unwrap();
     }
 
     /// Load OSM planet data to postgres via osm2pgsql
@@ -257,33 +254,34 @@ impl PostgresConnection {
     pub fn read_latest_duration(&mut self) -> Result<u128, Box<dyn Error>> {
         const QUIET: Duration = Duration::from_millis(50);
         const DEADLINE: Duration = Duration::from_secs(2);
-        let reader = self.log_stream.as_mut().ok_or("log stream not open")?;
         let deadline = Instant::now() + DEADLINE;
         let mut last_match: Option<(u128, Instant)> = None;
 
         loop {
-            let mut chunk = String::new();
-            let n = reader.read_line(&mut chunk)?;
-
-            if n > 0 {
-                self.log_pending.push_str(&chunk);
-                while let Some(nl) = self.log_pending.find('\n') {
-                    let line: String = self.log_pending.drain(..=nl).collect();
+            
+            if let Some((ms, t)) = last_match && t.elapsed() >= QUIET {
+                return Ok(ms);
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return last_match.map(|(ms, _) | ms)
+                    .ok_or_else(||"timed out waiting for duration line".into())
+            }
+            let wait = QUIET.min(deadline - now);
+            match self.rt.block_on(tokio::time::timeout(wait, self.log_rx.recv())) {
+                Ok(Some(line)) => {
                     if let Some(ms) = parse_duration_ms(&line) {
                         last_match = Some((ms, Instant::now()));
                     }
                 }
-            } else {
-                if let Some((ms, t)) = last_match {
-                    if t.elapsed() >= QUIET || Instant::now() >= deadline {
-                        return Ok(ms);
-                    }
-                } else if Instant::now() >= deadline {
-                    return Err("timed out waiting for duration line".into());
-                }
-                sleep(Duration::from_millis(5));
+                Ok(None) => return Err("log stream ended".into()),
+                Err(_elapsed) => {}
             }
         }
+    }
+
+    pub fn flush_logs(&mut self) {
+        while self.log_rx.try_recv().is_ok() {}
     }
 
     /// Run a test query on the PostgreSQL database.
@@ -292,6 +290,7 @@ impl PostgresConnection {
         if self.client.is_closed() {
             self.client = create_client();
         }
+        self.flush_logs();
         // Execute Query
         let response = self.client.simple_query(query);
         // Write Result info to log
@@ -327,10 +326,7 @@ impl PostgresConnection {
     pub fn close(&mut self) -> Result<(), Box<dyn Error>> {
         //Stop docker container
         trace!("Stopping postgres container");
-        let rt = Runtime::new().unwrap();
-        let handle = rt.handle();
-
-        handle.block_on(async {
+        self.rt.block_on(async {
             let docker = Docker::connect_with_defaults().unwrap();
 
             docker
@@ -346,11 +342,6 @@ impl PostgresConnection {
                     self.docker_id.as_str(),
                     None::<bollard::query_parameters::RemoveContainerOptions>,
                 )
-                .await
-                .unwrap();
-
-            docker
-                .prune_volumes(None::<PruneVolumesOptions>)
                 .await
                 .unwrap();
             docker.prune_build(None::<PruneBuildOptions>).await.unwrap();
