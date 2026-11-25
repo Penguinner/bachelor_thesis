@@ -20,7 +20,7 @@ use std::process::Command;
 use std::sync::OnceLock;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use std::{eprintln, format, vec};
+use std::{eprintln, format, panic, vec};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
@@ -366,25 +366,45 @@ pub fn create_client() -> Client {
         host
     );
     // Attempt to connect to Postgres DB
-    let mut retries = 0;
-    let max_retries = 10;
-    let client: Client;
+    const DEADLINE : Duration = Duration::from_secs(60);
+    let deadline = Instant::now() + DEADLINE;
+    let mut attempt: u32 = 0;
     loop {
+        attempt += 1;
         match Client::connect(&conn_str, NoTls) {
-            Ok(cli) => {
-                client = cli;
-                break;
-            }
-            Err(_) if retries < max_retries => {
-                retries += 1;
-                sleep(Duration::from_secs(2));
-            }
+            Ok(mut cli) => {
+                match cli.simple_query("SELECT 1") {
+                    Ok(_) => {
+                        info!("postgres ready after {attempt} attemps(s)");
+                        return cli
+                    },
+                    Err(e) if is_starting_up(&e) => {
+                        info!("postgres still starting up (attempt {attempt})");
+                    },
+                    Err(e) => {
+                        panic!("postgres query failed: {e}");
+                    }
+                }
+            },
             Err(e) => {
                 panic!("Failed to connect to database: {}", e);
             }
         }
+
+        if Instant::now() >= deadline {
+            panic!("postgres not ready after {DEADLINE:?} ({attempt} attempts)")
+        }
+        sleep(Duration::from_millis(200));
     }
-    client
+}
+
+fn is_starting_up(err: &postgres::Error) -> bool {
+    // 57P03 = cannot_connect_now: "the database system is starting up"
+    if let Some(code) = err.code().map(|c| c.code()){
+        return code == "57P03"
+    } else {
+        return false
+    }
 }
 
 fn parse_duration_ms(line: &str) -> Option<u128> {
