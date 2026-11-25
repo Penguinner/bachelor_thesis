@@ -2,7 +2,7 @@ use bollard::Docker;
 use bollard::query_parameters::{PruneBuildOptions, PruneImagesOptions, PruneVolumesOptions};
 use core::panic;
 use glob::glob;
-use log::{error, info, trace};
+use log::{error, info};
 use regex::{Captures, Regex};
 use reqwest::header;
 use serde::Deserialize;
@@ -30,7 +30,7 @@ impl QLeverConnection {
     pub fn new(dataset: &Dataset) -> Result<QLeverConnection, Box<dyn Error>> {
         // Read Config for dataset
         let mut qlever_file = QLeverConnection::setup_config(dataset);
-        trace!("Finished Setup Config");
+        info!("Finished Setup Config");
         qlever_file.replace_internal_variables();
         // Create directory for dataset
         fs::create_dir(
@@ -42,12 +42,12 @@ impl QLeverConnection {
         )?;
         // Get Data for dataset with qlever file command
         QLeverConnection::get_data(&qlever_file);
-        trace!("Finished Fetching Data");
+        info!("Finished Fetching Data");
         // Start Indexing
         QLeverConnection::index(&qlever_file);
-        trace!("Finished Indexing");
+        info!("Finished Indexing");
         let conn = QLeverConnection::start(&qlever_file);
-        trace!("Finished startup");
+        info!("Finished startup");
         Ok(conn)
     }
 
@@ -288,7 +288,7 @@ impl QLeverConnection {
     /// Stop the QLever docker container
     pub fn stop(&self) -> Result<(), Box<dyn Error>> {
         //Stop docker container
-        trace!("Stopping qlever docker container");
+        info!("Stopping qlever docker container");
         let rt = Runtime::new().unwrap();
         let handle = rt.handle();
 
@@ -415,7 +415,7 @@ pub struct QleverFile {
 impl QleverFile {
     /// Replaces variables inside the QLeverfile with the corresponding value
     pub fn replace_internal_variables(&mut self) {
-        trace!("Replacing internal variables in QLeverFile");
+        info!("Replacing internal variables in QLeverFile");
         let regex = Regex::new(r"\$\{(?<prefix>\w+:)?(?<key>\w+)}").unwrap();
         // Iterate over Data
         self.data = self

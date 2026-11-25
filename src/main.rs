@@ -9,7 +9,7 @@ use csv::ReaderBuilder;
 use ftail::Ftail;
 use futures::TryStreamExt;
 use itertools::{Itertools, iproduct};
-use log::{error, info, trace, warn};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
@@ -104,7 +104,7 @@ fn main() {
         matches.get_flag("hot"),
     );
     clean_up();
-    trace!("Finished Tests");
+    info!("Finished Tests");
 }
 
 fn setup_cli() -> clap::ArgMatches {
@@ -190,14 +190,14 @@ fn run_tests(mut tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotr
         clear_cache().unwrap();
         let name = test.name();
         let query_file = test.dataset.get_query_file();
-        trace!("Start of Test: {name}");
+        info!("Start of Test: {name}");
         // Create Connection and insert Data
         let mut conn = test.db.to_connection(&test.dataset).unwrap_or_else(|e| {
             error!("{e}");
             panic!("Failed to create connection for {name}");
         });
         // Run Queries
-        trace!("Start cold run of Test: {name}");
+        info!("Start cold run of Test: {name}");
         let results: Vec<TestResult> = match run_test(&query_file, iter, &mut conn, false) {
             Ok(i) => i,
             Err(e) => {
@@ -205,10 +205,10 @@ fn run_tests(mut tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotr
                 vec![]
             }
         };
-        trace!("End cold run of Test: {name}");
+        info!("End cold run of Test: {name}");
         let mut hot_results: Vec<TestResult> = Vec::new();
         if hotrun {
-            trace!("Start hot run of Test: {name}");
+            info!("Start hot run of Test: {name}");
             hot_results = match run_test(&query_file, iter, &mut conn, true) {
                 Ok(i) => i,
                 Err(e) => {
@@ -216,7 +216,7 @@ fn run_tests(mut tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotr
                     vec![]
                 }
             };
-            trace!("End hot run of Test: {name}");
+            info!("End hot run of Test: {name}");
         }
         // Save Results
         save_results(&name, raw, aggregate, results, hot_results);
@@ -228,7 +228,7 @@ fn run_tests(mut tests: Vec<Test>, iter: usize, raw: bool, aggregate: bool, hotr
             error!("{e}");
             panic!("Failed to close connection for {name}");
         });
-        trace!("End of Test: {}", name);
+        info!("End of Test: {}", name);
     }
 }
 
@@ -243,7 +243,7 @@ fn save_results(
     let _ = create_dir_all("/extern/results");
     // Write raw results to a tsv file
     if raw {
-        trace!("Write cold raw results");
+        info!("Write cold raw results");
         write_results(
             &results,
             File::create(format!("/extern/results/{}-cold.raw.tsv", name)).unwrap(),
@@ -253,7 +253,7 @@ fn save_results(
         });
 
         if !hot_results.is_empty() {
-            trace!("Write hot raw results");
+            info!("Write hot raw results");
             write_results(
                 &hot_results,
                 File::create(format!("/extern/results/{}-hot.raw.tsv", name)).unwrap(),
@@ -265,7 +265,7 @@ fn save_results(
     }
     // Write aggregated results to a tsv file
     if aggregate {
-        trace!("Write cold aggregated results");
+        info!("Write cold aggregated results");
         write_results_aggregated(
             &results,
             File::create(format!("/extern/results/{}-cold.aggregate.tsv", name)).unwrap(),
@@ -275,7 +275,7 @@ fn save_results(
         });
 
         if !hot_results.is_empty() {
-            trace!("Write hot aggregate results");
+            info!("Write hot aggregate results");
             write_results_aggregated(
                 &hot_results,
                 File::create(format!("/extern/results/{}-hot.aggregate.tsv", name)).unwrap(),
@@ -342,15 +342,15 @@ impl Dataset {
                 handle
                     .block_on(download_dblp_data("/extern/data/dblp.xml".into()))
                     .unwrap();
-                trace!("Parsing DBLP data");
+                info!("Parsing DBLP data");
                 let mut parser = Parser::new("/extern/data/dblp.xml");
                 parser.run();
-                trace!("Finished Parsing DBLP data");
+                info!("Finished Parsing DBLP data");
             }
             // Download osm-planet data
             Dataset::OsmPlanet if !exists("/extern/data/planet-latest.osm.pbf").unwrap() => {
                 let url = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
-                trace!("Downloading OSM data {url}");
+                info!("Downloading OSM data {url}");
                 let client = reqwest::blocking::Client::builder()
                     .timeout(Duration::from_secs(900))
                     .build()
@@ -622,13 +622,13 @@ fn run_test(
 
     if hotrun {
         // Warm up the database
-        trace!("Starting warmup");
+        info!("Starting warmup");
         for _ in 0..5 {
             for record in queries.iter() {
                 let _ = connection.run_test_query(record);
             }
         }
-        trace!("Finished warmup");
+        info!("Finished warmup");
     }
 
     for iter in 0..iterations {
@@ -638,16 +638,16 @@ fn run_test(
                 connection.cooldown();
                 clear_cache().unwrap();
             }
-            trace!("Running query {id} iteration: {iter}");
+            info!("Running query {id} iteration: {iter}");
             let result = connection.run_test_query(record);
             match result {
                 Ok(time) => {
                     results[id].add_time(time);
-                    trace!("Finished query {id} iteration: {iter} with {time}ms");
+                    info!("Finished query {id} iteration: {iter} with {time}ms");
                 }
                 Err(_) => {
                     results[id].inc_failures();
-                    warn!("Finished query {id} iteration: {iter} with failure");
+                    info!("Finished query {id} iteration: {iter} with failure");
                 }
             }
         }
@@ -722,7 +722,7 @@ async fn download_dblp_data(filename: String) -> Result<(), Box<dyn Error>> {
 
     let client = reqwest::Client::new();
     const MAX_RETRIES: u32 = 10;
-    trace!("Starting DBLP xml download");
+    info!("Starting DBLP xml download");
     for attempt in 0..=MAX_RETRIES {
         match download_attempt(&client, url, &filename).await {
             Ok(()) => return Ok(()),
@@ -756,7 +756,7 @@ async fn download_attempt(
     let mut decoder = GzipDecoder::new(reader);
     let mut output = tokio::fs::File::create(filename).await?;
     tokio::io::copy(&mut decoder, &mut output).await?;
-    trace!("Download successful");
+    info!("Download successful");
     Ok(())
 }
 
