@@ -81,6 +81,10 @@ impl PostgresConnection {
                     "POSTGRES_USER=postgres".to_string(),
                     "POSTGRES_DB=database".to_string(),
                 ]),
+                cmd: Some(vec![
+                    "-c".to_string(),
+                    "log_duration=on".to_string(),
+                ]),
                 host_config: Some(HostConfig {
                     port_bindings: Some(port_bindings),
                     ..Default::default()
