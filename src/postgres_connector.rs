@@ -258,7 +258,6 @@ impl PostgresConnection {
         let mut last_match: Option<(u128, Instant)> = None;
 
         loop {
-            
             if let Some((ms, t)) = last_match && t.elapsed() >= QUIET {
                 return Ok(ms);
             }
@@ -268,7 +267,10 @@ impl PostgresConnection {
                     .ok_or_else(||"timed out waiting for duration line".into())
             }
             let wait = QUIET.min(deadline - now);
-            match self.rt.block_on(tokio::time::timeout(wait, self.log_rx.recv())) {
+            let res = self.rt.block_on(async {
+                tokio::time::timeout(wait, self.log_rx.recv()).await
+            });
+            match res {
                 Ok(Some(line)) => {
                     if let Some(ms) = parse_duration_ms(&line) {
                         last_match = Some((ms, Instant::now()));
