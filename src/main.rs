@@ -645,9 +645,9 @@ fn run_test(
                     results[id].add_time(time);
                     info!("Finished query {id} iteration: {iter} with {time}ms");
                 }
-                Err(_) => {
+                Err(e) => {
                     results[id].inc_failures();
-                    info!("Finished query {id} iteration: {iter} with failure");
+                    info!("Finished query {id} iteration: {iter} with failure {e}");
                 }
             }
         }

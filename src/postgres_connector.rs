@@ -9,7 +9,7 @@ use bollard::query_parameters::{
     CreateContainerOptionsBuilder, LogsOptionsBuilder, PruneBuildOptions, PruneImagesOptions, RestartContainerOptions,
 };
 use futures::{StreamExt, TryStreamExt};
-use log::{debug, info};
+use log::{debug, error, info};
 use postgres::{Client, NoTls};
 use regex::Regex;
 use std::collections::HashMap;
@@ -386,7 +386,9 @@ pub fn create_client() -> Client {
                     }
                 }
             },
-            Err(e) => { }
+            Err(e) => { 
+                debug!("{}",e)
+            }
         }
 
         if Instant::now() >= deadline {
