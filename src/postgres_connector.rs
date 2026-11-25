@@ -287,22 +287,16 @@ impl PostgresConnection {
         }
         self.flush_logs();
         // Execute Query
-        let response = self.client.simple_query(query);
+        let stmt = self.client.prepare(query)?;
+        let response = self.client.query(&stmt, &[]);
         // Write Result info to log
         let result: Result<u128, Box<dyn Error>> = match response {
             Ok(data) => {
                 // Get columns from first row
                 let duration = self.read_latest_duration()?;
-                let mut columns = 0;
-                let mut rows = 0;
-                for msg in &data {
-                    if let postgres::SimpleQueryMessage::Row(row) = msg {
-                        if columns == 0 {
-                            columns = row.len()
-                        }
-                        rows += 1;
-                    }
-                }
+                let columns = stmt.columns().len();
+                let rows = data.len();
+                
                 info!(
                     "Query: {0}\nDuration: {1}\nResult Size: Columns {2} Rows {3}\n",
                     query, duration, columns, rows
