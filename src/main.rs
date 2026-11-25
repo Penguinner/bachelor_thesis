@@ -54,7 +54,7 @@ fn main() {
             true,
             log::LevelFilter::Trace,
         )
-        .console(log::LevelFilter::Trace)
+        .console(log::LevelFilter::Info)
         .init()
         .unwrap();
     // CLI Setup
