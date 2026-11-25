@@ -386,9 +386,7 @@ pub fn create_client() -> Client {
                     }
                 }
             },
-            Err(e) => {
-                panic!("Failed to connect to database: {}", e);
-            }
+            Err(e) => { }
         }
 
         if Instant::now() >= deadline {
