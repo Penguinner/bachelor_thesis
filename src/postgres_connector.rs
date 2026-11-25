@@ -83,7 +83,7 @@ impl PostgresConnection {
                 ]),
                 cmd: Some(vec![
                     "-c".to_string(),
-                    "log_duration=on".to_string(),
+                    "log_min_duration_statement=0".to_string(),
                 ]),
                 host_config: Some(HostConfig {
                     port_bindings: Some(port_bindings),
