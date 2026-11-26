@@ -293,16 +293,12 @@ impl PostgresConnection {
         const QUIET: Duration = Duration::from_millis(50);
         const DEADLINE: Duration = Duration::from_secs(60);
         let deadline = Instant::now() + DEADLINE;
-        let mut last_match: Option<(u128, Instant)> = None;
+        let mut duration = QueryTiming::new_empty();
 
         loop {
-            if let Some((ms, t)) = last_match && t.elapsed() >= QUIET {
-                return Ok(ms);
-            }
             let now = Instant::now();
             if now >= deadline {
-                return last_match.map(|(ms, _) | ms)
-                    .ok_or_else(||"timed out waiting for duration line".into())
+                return Err("timed out waiting for query timing".into())
             }
             let wait = QUIET.min(deadline - now);
             let res = self.rt.block_on(async {
@@ -310,8 +306,19 @@ impl PostgresConnection {
             });
             match res {
                 Ok(Some(line)) => {
-                    if let Some(ms) = parse_duration_ms(&line) {
-                        last_match = Some((ms, Instant::now()));
+                    if let Some((phase, stmt_id, ms)) = parse_duration_ms(&line) {
+                        if !duration.check_same_statement(&stmt_id) {
+                            continue;
+                        }
+                        match phase {
+                            TimingPhase::Bind => duration.bind = ms,
+                            TimingPhase::Parse => duration.parse = ms,
+                            TimingPhase::Execute => {
+                                duration.execute = ms;
+
+                                return Ok(duration.total())
+                            }
+                        }
                     }
                 }
                 Ok(None) => return Err("log stream ended".into()),
@@ -444,12 +451,53 @@ fn is_starting_up(err: &postgres::Error) -> bool {
     }
 }
 
-fn parse_duration_ms(line: &str) -> Option<u128> {
+fn parse_duration_ms(line: &str) -> Option<(TimingPhase, String, f64)> {
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"duration:\s+(\d+(?:\.\d+)?)\s+ms").unwrap());
+    let re = RE.get_or_init(|| Regex::new(r"duration:\s+(\d+(?:\.\d+)?)\s+ms\s+(parse|bind|execute)\s+(s\d+)").unwrap());
     let caps = re.captures(line)?;
     let ms: f64 = caps.get(1)?.as_str().parse().ok()?;
-    Some(ms.round() as u128)
+    let phase = match caps.get(2)?.as_str() {
+        "parse" => TimingPhase::Parse,
+        "bind" => TimingPhase::Bind,
+        "execute" => TimingPhase::Execute,
+        _ => return None,
+    };
+    let stmt_id = caps.get(3)?.as_str().to_string();
+    Some((phase, stmt_id, ms))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TimingPhase {
+    Parse,
+    Bind,
+    Execute,
+}
+
+pub struct QueryTiming {
+    pub stmt_id: String,
+    pub parse: f64,
+    pub bind: f64,
+    pub execute: f64,
+}
+
+impl QueryTiming {
+
+    pub fn new_empty() -> QueryTiming {
+        QueryTiming { stmt_id: String::new(), parse: 0.0, bind: 0.0, execute: 0.0 }
+    }
+
+    pub fn check_same_statement(&mut self, stmt_id: &String) -> bool {
+        if self.stmt_id.is_empty() {
+            self.stmt_id = stmt_id.to_string();
+        }
+        self.stmt_id.eq(stmt_id)
+    }
+
+    pub fn total(&self) -> u128 {
+        let total_f64: f64 = self.parse + self.bind + self.execute;
+
+        total_f64.round() as u128
+    }
 }
 
 #[cfg(test)]
@@ -459,9 +507,12 @@ mod tests {
 
     #[test]
     fn test_duration_parse() {
-        let result = parse_duration_ms("duration: 20.000 ms");
+        let result = parse_duration_ms("duration: 20.000 ms execute s21");
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), 20u128);
+        let tuple = result.unwrap();
+        assert_eq!(tuple.0, TimingPhase::Execute);
+        assert_eq!(tuple.1, "s21".to_string());
+        assert_eq!(tuple.2, 20.0f64);
 
         assert!(parse_duration_ms("Test Test").is_none())
     }
