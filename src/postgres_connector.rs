@@ -9,7 +9,7 @@ use bollard::query_parameters::{
     CreateContainerOptionsBuilder, LogsOptionsBuilder, PruneBuildOptions, PruneImagesOptions, RestartContainerOptions,
 };
 use futures::{StreamExt, TryStreamExt};
-use log::{debug, error, info};
+use log::{debug, info};
 use postgres::{Client, NoTls};
 use regex::Regex;
 use std::collections::HashMap;
@@ -28,8 +28,8 @@ use tokio::sync::mpsc;
 pub struct PostgresConnection {
     client: Client,
     docker_id: String,
-    rt: Runtime,
     log_rx: mpsc::Receiver<String>,
+    rt: Runtime,
 }
 
 impl PostgresConnection {
@@ -177,8 +177,14 @@ impl PostgresConnection {
             docker
                 .restart_container(&self.docker_id, Some(RestartContainerOptions::default()))
                 .await
-        })
-        .unwrap();
+                .expect("restart failed")
+        });
+
+        self.client = create_client();
+
+        self.log_rx = self.create_log_reader();
+
+        self.flush_logs();
     }
 
     /// Load OSM planet data to postgres via osm2pgsql
@@ -248,9 +254,44 @@ impl PostgresConnection {
         info!("Inserted DBLP data into Postgres");
     }
 
+    fn create_log_reader(&self) -> mpsc::Receiver<String> {
+        // Create log reader
+        let (tx, log_rx) = mpsc::channel::<String>(256);
+        let container = self.docker_id.clone();
+        self.rt.spawn(async move {
+            let docker = Docker::connect_with_defaults().unwrap();
+            let options = Some(
+                LogsOptionsBuilder::new().stdout(true)
+                    .follow(true)
+                    .tail("0")
+                    .stderr(true)
+                    .build()
+            );
+
+            let mut stream = docker.logs(&container, options);
+            let mut buf = String::new();
+            while let Some(item) = stream.next().await {
+                match item {
+                    Ok(out) => {
+                        buf.push_str(&out.to_string());
+                        while let Some(nl) = buf.find('\n') {
+                            let line: String = buf.drain(..=nl).collect();
+                            if tx.send(line).await.is_err() { return; }
+                        }
+                    },
+                    Err(e) => {
+                        debug!("log stream error: {e}");
+                        eprintln!("log stream error: {e}")
+                    }
+                }
+            }
+        });
+        log_rx
+    }
+
     pub fn read_latest_duration(&mut self) -> Result<u128, Box<dyn Error>> {
         const QUIET: Duration = Duration::from_millis(50);
-        const DEADLINE: Duration = Duration::from_secs(2);
+        const DEADLINE: Duration = Duration::from_secs(60);
         let deadline = Instant::now() + DEADLINE;
         let mut last_match: Option<(u128, Instant)> = None;
 
@@ -285,10 +326,6 @@ impl PostgresConnection {
 
     /// Run a test query on the PostgreSQL database.
     pub fn run_test_query(&mut self, query: &str) -> Result<u128, Box<dyn Error>> {
-        // Recreate client if connection was closed
-        if self.client.is_closed() {
-            self.client = create_client();
-        }
         self.flush_logs();
         // Execute Query
         let stmt = self.client.prepare(query)?;
@@ -401,9 +438,9 @@ pub fn create_client() -> Client {
 fn is_starting_up(err: &postgres::Error) -> bool {
     // 57P03 = cannot_connect_now: "the database system is starting up"
     if let Some(code) = err.code().map(|c| c.code()){
-        return code == "57P03"
+        code == "57P03"
     } else {
-        return false
+        false
     }
 }
 
