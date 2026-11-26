@@ -41,7 +41,7 @@ SELECT (SUM(?count_paper) as ?agg) WHERE {
   GROUP BY ?author
   }
 }"
-Concat	SELECT pub.id, string_agg(Authors.name) FROM Publications as pub LEFT JOIN PublicationAuthors as pubauth ON pubauth.publication_id = pub.id LEFT JOIN Authors ON pubauth.author_id = Authors.key GROUP BY pub.id;	SELECT pub.id, string_agg(Authors.name) FROM Publications as pub LEFT JOIN PublicationAuthors as pubauth ON pubauth.publication_id = pub.id LEFT JOIN Authors ON pubauth.author_id = Authors.key GROUP BY pub.id;	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?paper (GROUP_CONCAT(?author_label) as ?labels) WHERE { ?paper dblp:authoredBy ?author . ?author rdfs:label ?author_label . } GROUP BY ?paper"
+Concat	SELECT pub.id, string_agg(Authors.name, ',') FROM Publications as pub LEFT JOIN PublicationAuthors as pubauth ON pubauth.publication_id = pub.id LEFT JOIN Authors ON pubauth.author_id = Authors.key GROUP BY pub.id;	SELECT pub.id, string_agg(Authors.name) FROM Publications as pub LEFT JOIN PublicationAuthors as pubauth ON pubauth.publication_id = pub.id LEFT JOIN Authors ON pubauth.author_id = Authors.key GROUP BY pub.id;	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?paper (GROUP_CONCAT(?author_label) as ?labels) WHERE { ?paper dblp:authoredBy ?author . ?author rdfs:label ?author_label . } GROUP BY ?paper"
 Contains/ Like	"SELECT COUNT(*) FROM Publications WHERE title LIKE '%Database%';"	"SELECT COUNT(*) FROM Publications WHERE title LIKE '%Database%';"	"PREFIX dblp: <https://dblp.org/rdf/schema#>
 SELECT (COUNT(*) as ?count) WHERE {
   ?paper dblp:title ?title .
